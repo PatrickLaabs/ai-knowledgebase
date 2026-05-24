@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Knowledge Base</title>
+
+    <!-- Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+    <!-- Syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+
+    <style>
+        /* ── Reset ─────────────────────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        button { touch-action: manipulation; } /* prevent double-tap zoom on mobile */
+
+        /* ── Design tokens ─────────────────────────────────────────────────────── */
+        :root {
+            --bg:         #0e0e0e;
+            --surface:    #161616;
+            --surface-2:  #1f1f1f;
+            --border:     #2a2a2a;
+            --border-2:   #363636;
+            --text:       #d4d0c8;
+            --text-muted: #6b6762;
+            --text-dim:   #4a4744;
+            --accent:     #e8a020;
+            --accent-dim: #7a5010;
+            --danger:     #c0392b;
+            --success:    #27ae60;
+            --mono:       'IBM Plex Mono', monospace;
+            --serif:      'Lora', Georgia, serif;
+            --sidebar-w:  272px;
+            --topbar-h:   44px;
+            --bottomnav-h: 56px;
+            --radius:     3px;
+        }
+
+        html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; }
+
+        /* ── Topbar ─────────────────────────────────────────────────────────────── */
+        .topbar {
+            position: fixed; top: 0; left: 0; right: 0;
+            height: var(--topbar-h);
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; padding: 0 12px; gap: 12px;
+            z-index: 200;
+        }
+        .btn-hamburger {
+            display: none; /* shown on mobile */
+            background: none; border: none; color: var(--text-muted);
+            font-size: 18px; cursor: pointer; padding: 6px; line-height: 1;
+            min-width: 36px; min-height: 36px; align-items: center; justify-content: center;
+        }
+        .topbar-brand { font-size: 13px; font-weight: 500; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+        .topbar-brand span { color: var(--text-muted); font-weight: 400; }
+        .tab-group { display: flex; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 2px; }
+        .tab {
+            padding: 4px 14px; border: none; background: transparent;
+            color: var(--text-muted); font-family: var(--mono); font-size: 12px;
+            letter-spacing: 0.05em; cursor: pointer; border-radius: 2px; transition: all 0.15s;
+        }
+        .tab.active  { background: var(--surface-2); color: var(--accent); }
+        .tab:hover:not(.active) { color: var(--text); }
+        .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); transition: background 0.3s; }
+        .status-dot.ok  { background: var(--success); }
+        .status-dot.err { background: var(--danger); }
+        .status-label { font-size: 11px; color: var(--text-muted); }
+
+        /* ── App shell ──────────────────────────────────────────────────────────── */
+        .app-shell {
+            display: flex;
+            padding-top: var(--topbar-h);
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* ── Sidebar overlay backdrop (mobile) ──────────────────────────────────── */
+        .sidebar-backdrop {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 150;
+            opacity: 0; transition: opacity 0.25s;
+        }
+        .sidebar-backdrop.visible { opacity: 1; }
+
+        /* ── Sidebar ────────────────────────────────────────────────────────────── */
+        /* Sidebar Parent Structure */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh; /* Fill the vertical screen */
+            border-right: 1px solid var(--border);
+            background: var(--bg);
+            min-width: 0;
+            width: var(--sidebar-w);
+        }
+        /* 1. Upper Panel: Tags section wrapper */
+        .sidebar .tags-section {
+            flex: 4;
+            display: flex;
+            flex-direction: column;
+            min-height: 150px;
+            border-bottom: 1px solid var(--border);
+            padding: 16px;
+            min-width: 0;
+        }
+        .sidebar .notes-section {
+            flex: 6; /* Takes up 60% of the space */
+            display: flex;
+            flex-direction: column;
+            min-height: 200px;
+            padding: 16px;
+            min-width: 0;
+        }
+        .sidebar-section { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+        .sidebar-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
+        .search-input {
+            width: 100%; background: var(--bg); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 8px 10px;
+            font-family: var(--mono); font-size: 16px; /* 16px prevents iOS zoom */
+            color: var(--text); outline: none; transition: border-color 0.15s;
+        }
+        .search-input::placeholder { color: var(--text-dim); }
+        .search-input:focus { border-color: var(--accent-dim); }
+        /* ── Tag Tree ───────────────────────────────────────────────────────────── */
+        .tag-tree { display: block; width: 100%; margin-top: 4px; }
+        .tag-node { display: flex; flex-direction: column; }
+        .tag-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 8px;
+            border-radius: 2px;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-family: var(--mono);
+            font-size: 11px;
+            transition: all 0.12s;
+            user-select: none;
+            min-width: 0;
+        }
+        .tag-row:hover { background: var(--surface-2); color: var(--text); }
+        .tag-row.active { color: var(--accent); background: rgba(232,160,32,0.07); }
+        .tag-toggle {
+            width: 14px; height: 14px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; color: var(--text-dim); transition: transform 0.15s;
+            font-size: 9px; flex-shrink: 0;
+        }
+        .tag-toggle:hover { color: var(--text); }
+        .tag-toggle.expanded { transform: rotate(90deg); }
+        .tag-children {
+            display: none; flex-direction: column;
+            padding-left: 12px; margin-left: 11px; /* Indent line */
+            border-left: 1px solid var(--border); margin-top: 2px; gap: 2px;
+        }
+        .tag-children.expanded { display: flex; }
+        #tag-filter-list {
+            flex: 1;
+            overflow-y: auto; /* Independent vertical scrollbar */
+            margin-top: 8px;
+            padding-right: 4px;
+        }
+        #tag-filter-list::-webkit-scrollbar,
+        #notes-list::-webkit-scrollbar {
+            width: 4px;
+        }
+        #tag-filter-list::-webkit-scrollbar-thumb,
+        #notes-list::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 2px;
+        }
+        #notes-list {
+            flex: 1;
+            overflow-y: auto; /* Independent vertical scrollbar */
+            margin-top: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding-right: 4px;
+        }
+        .tag-pill {
+            padding: 4px 9px; border-radius: 2px; border: 1px solid var(--border);
+            background: transparent; font-family: var(--mono); font-size: 11px;
+            color: var(--text-muted); cursor: pointer; transition: all 0.12s; white-space: nowrap;
+            min-height: 28px;
+        }
+        .tag-pill:hover   { border-color: var(--border-2); color: var(--text); }
+        .tag-pill.active  { border-color: var(--accent-dim); color: var(--accent); background: rgba(232,160,32,0.07); }
+        .notes-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+        .notes-list::-webkit-scrollbar { width: 3px; }
+        .notes-list::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+        .note-item { padding: 10px 12px; border-left: 2px solid transparent; cursor: pointer; transition: all 0.12s; }
+        .note-item:hover  { background: var(--surface-2); }
+        .note-item.active { border-left-color: var(--accent); background: rgba(232,160,32,0.05); }
+        .note-preview     { font-size: 12px; color: var(--text); line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin-bottom: 5px; }
+        .note-meta        { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+        .note-date        { font-size: 10px; color: var(--text-dim); }
+        .note-tag         { font-size: 10px; color: var(--accent-dim); background: rgba(232,160,32,0.08); padding: 1px 5px; border-radius: 2px; }
+        .note-count       { font-size: 10px; color: var(--text-dim); margin-left: auto; }
+        .sidebar-footer   { padding: 10px 12px; border-top: 1px solid var(--border); }
+        .btn-new {
+            width: 100%; padding: 9px; background: rgba(232,160,32,0.1);
+            border: 1px solid var(--accent-dim); color: var(--accent); font-family: var(--mono);
+            font-size: 12px; letter-spacing: 0.05em; cursor: pointer; border-radius: var(--radius);
+            transition: all 0.15s; min-height: 44px;
+        }
+        .btn-new:hover { background: rgba(232,160,32,0.18); }
+
+        /* ── Main ───────────────────────────────────────────────────────────────── */
+        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+        .view { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+        .view.active { display: flex; }
+
+        /* ── Shared button styles ───────────────────────────────────────────────── */
+        .btn {
+            padding: 7px 14px; border: 1px solid var(--border); background: var(--surface-2);
+            color: var(--text); font-family: var(--mono); font-size: 12px; cursor: pointer;
+            border-radius: var(--radius); transition: all 0.15s; min-height: 36px;
+            white-space: nowrap;
+        }
+        .btn:hover  { border-color: var(--border-2); }
+        .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        .btn-primary { background: rgba(232,160,32,0.1); border-color: var(--accent-dim); color: var(--accent); }
+        .btn-primary:hover:not(:disabled) { background: rgba(232,160,32,0.2); }
+        .btn-danger  { color: var(--danger); border-color: #4a2020; }
+        .btn-danger:hover:not(:disabled)  { background: rgba(192,57,43,0.1); border-color: var(--danger); }
+
+        /* ── Markdown Toolbar ───────────────────────────────────────────────────── */
+        .md-toolbar {
+            display: flex; align-items: center; gap: 2px;
+            padding: 6px 10px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+        .md-toolbar::-webkit-scrollbar { display: none; }
+        .md-toolbar-sep { width: 1px; height: 18px; background: var(--border-2); margin: 0 4px; flex-shrink: 0; }
+        .md-btn {
+            padding: 4px 8px; background: none; border: 1px solid transparent;
+            color: var(--text-muted); font-family: var(--mono); font-size: 11px;
+            cursor: pointer; border-radius: 2px; transition: all 0.12s;
+            min-width: 32px; min-height: 28px; white-space: nowrap; flex-shrink: 0;
+        }
+        .md-btn:hover { border-color: var(--border); color: var(--text); background: var(--surface-2); }
+        .md-btn b, .md-btn i { font-style: italic; }
+
+        /* Mobile-only: Write/Preview tab switcher inside editor */
+        .editor-mode-tabs {
+            display: none; /* shown on mobile */
+            padding: 6px 10px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            gap: 4px;
+        }
+        .mode-tab {
+            flex: 1; padding: 7px; background: transparent; border: 1px solid var(--border);
+            color: var(--text-muted); font-family: var(--mono); font-size: 12px;
+            cursor: pointer; border-radius: var(--radius); transition: all 0.15s; min-height: 36px;
+        }
+        .mode-tab.active { border-color: var(--accent-dim); color: var(--accent); background: rgba(232,160,32,0.07); }
+
+        /* ── Editor pane ────────────────────────────────────────────────────────── */
+        .editor-pane {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        /* Write side */
+        .write-pane {
+            flex: 1; display: flex; flex-direction: column;
+            border-right: 1px solid var(--border);
+            min-width: 0;
+        }
+        .note-textarea {
+            flex: 1; padding: 20px;
+            background: var(--bg); border: none; outline: none;
+            font-family: var(--mono); font-size: 14px; line-height: 1.75;
+            color: var(--text); resize: none;
+            -webkit-overflow-scrolling: touch;
+        }
+        .note-textarea::placeholder { color: var(--text-dim); font-style: italic; }
+
+        /* Preview side */
+        .preview-pane {
+            flex: 1; overflow-y: auto; padding: 20px 24px;
+            background: var(--bg);
+            -webkit-overflow-scrolling: touch;
+            min-width: 0;
+        }
+        .preview-pane::-webkit-scrollbar { width: 3px; }
+        .preview-pane::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+
+        /* Empty preview placeholder */
+        .preview-empty {
+            font-size: 13px; color: var(--text-dim); font-style: italic;
+            padding-top: 4px;
+        }
+
+        /* ── Markdown rendered output ───────────────────────────────────────────── */
+        .md-preview .code-wrapper {
+            position: relative;
+            margin: 1em 0;
+        }
+        .md-preview .code-wrapper pre {
+            margin: 0; /* The wrapper handles the vertical margin now */
+            padding-top: 32px; /* Make room so the copy button doesn't cover the code */
+        }
+        .md-preview .copy-btn {
+            position: absolute;
+            top: 6px;
+            right: 8px;
+            padding: 4px 8px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            font-family: var(--mono);
+            font-size: 10px;
+            border-radius: 2px;
+            cursor: pointer;
+            transition: all 0.15s;
+            z-index: 10;
+        }
+        .md-preview .copy-btn:hover {
+            color: var(--text);
+            border-color: var(--border-2);
+            background: var(--surface-2);
+        }
+        .md-preview { font-family: var(--serif); font-size: 15px; line-height: 1.75; color: var(--text); }
+        .md-preview h1, .md-preview h2, .md-preview h3, .md-preview h4 {
+            font-family: var(--serif); color: var(--text); line-height: 1.3; margin: 1.2em 0 0.5em;
+        }
+        .md-preview h1 { font-size: 1.55em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+        .md-preview h2 { font-size: 1.25em; }
+        .md-preview h3 { font-size: 1.05em; letter-spacing: 0.02em; }
+        .md-preview p  { margin: 0 0 1em; }
+        .md-preview a  { color: var(--accent); text-decoration: none; }
+        .md-preview a:hover { text-decoration: underline; }
+        .md-preview strong { font-weight: 600; color: #e0dcd4; }
+        .md-preview em     { color: var(--text-muted); }
+        .md-preview hr     { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }
+        .md-preview ul, .md-preview ol { margin: 0 0 1em; padding-left: 1.6em; }
+        .md-preview li { margin: 0.3em 0; line-height: 1.65; }
+        .md-preview blockquote {
+            border-left: 3px solid var(--accent-dim); margin: 1em 0;
+            padding: 0.5em 1em; color: var(--text-muted); font-style: italic;
+            background: rgba(232,160,32,0.04); border-radius: 0 var(--radius) var(--radius) 0;
+        }
+        /* Inline code */
+        .md-preview code {
+            font-family: var(--mono); font-size: 0.85em;
+            background: rgba(255,255,255,0.06); padding: 0.15em 0.45em;
+            border-radius: 3px; color: #e8a020; border: 1px solid var(--border);
+        }
+        /* Code block (overrides inline) */
+        .md-preview pre {
+            margin: 1em 0; border-radius: var(--radius);
+            border: 1px solid var(--border); overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .md-preview pre code {
+            background: transparent; border: none; padding: 0;
+            color: inherit; font-size: 0.82em; line-height: 1.6;
+        }
+        .md-preview table {
+            width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.9em; overflow-x: auto; display: block;
+        }
+        .md-preview th, .md-preview td { padding: 8px 12px; border: 1px solid var(--border); text-align: left; }
+        .md-preview th { background: var(--surface); color: var(--accent); font-family: var(--mono); font-size: 0.85em; }
+        .md-preview img { max-width: 100%; border-radius: var(--radius); margin: 0.5em 0; }
+
+        /* ── Editor footer (tags + actions) ─────────────────────────────────────── */
+        .editor-footer {
+            padding: 10px 14px;
+            border-top: 1px solid var(--border);
+            background: var(--surface);
+            display: flex; align-items: center; gap: 10px;
+            flex-shrink: 0; flex-wrap: wrap;
+        }
+        .editor-state { font-size: 10px; letter-spacing: 0.08em; color: var(--text-dim); white-space: nowrap; }
+        .tag-input-row {
+            flex: 1; display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+            background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 5px 8px; min-height: 36px; cursor: text; min-width: 120px;
+        }
+        .tag-input-row:focus-within { border-color: var(--border-2); }
+        .tag-chip {
+            display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px;
+            background: rgba(232,160,32,0.1); border: 1px solid var(--accent-dim);
+            border-radius: 2px; font-size: 11px; color: var(--accent);
+        }
+        .tag-chip button { background: none; border: none; color: var(--accent-dim); cursor: pointer; padding: 0; font-size: 13px; line-height: 1; min-width: 16px; min-height: 16px; }
+        .tag-chip button:hover { color: var(--accent); }
+        .tag-text-input {
+            flex: 1; min-width: 80px; background: transparent; border: none; outline: none;
+            font-family: var(--mono); font-size: 16px; /* 16px: no iOS zoom */
+            color: var(--text);
+        }
+        .tag-text-input::placeholder { color: var(--text-dim); font-size: 12px; }
+        .editor-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+        /* ── Chat view ──────────────────────────────────────────────────────────── */
+        .chat-inner {
+            flex: 1; display: flex; flex-direction: column;
+            max-width: 800px; width: 100%; margin: 0 auto;
+            padding: 0 20px 16px; overflow: hidden;
+        }
+        .chat-header { padding: 14px 0 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+        .chat-header-title { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); }
+        .messages {
+            flex: 1; overflow-y: auto; padding: 16px 0;
+            display: flex; flex-direction: column; gap: 20px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .messages::-webkit-scrollbar { width: 3px; }
+        .messages::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+        .message { display: flex; flex-direction: column; gap: 6px; }
+        .msg-role { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+        .msg-role.user      { color: var(--text-dim); }
+        .msg-role.assistant { color: var(--accent); }
+        .msg-bubble {
+            padding: 14px 16px; border-radius: var(--radius); line-height: 1.7;
+            border: 1px solid var(--border); font-size: 13.5px;
+        }
+        .msg-bubble.user {
+            background: var(--surface); font-family: var(--mono); color: var(--text);
+            align-self: flex-end; max-width: 88%;
+        }
+        .msg-bubble.assistant {
+            background: rgba(14,14,14,0.6); font-family: var(--serif);
+            border-left: 2px solid var(--accent-dim);
+        }
+        /* Streaming cursor */
+        .msg-bubble.assistant.streaming::after {
+            content: '▋'; color: var(--accent);
+            animation: blink 0.85s step-end infinite; margin-left: 2px;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* Markdown inside chat bubbles — same as .md-preview */
+        .msg-bubble.assistant .md-preview { font-size: 14px; }
+
+        /* Sources */
+        .sources { display: flex; flex-direction: column; gap: 6px; }
+        .sources-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); }
+        .sources-list  { display: flex; flex-wrap: wrap; gap: 5px; }
+        .source-chip {
+            padding: 4px 10px; background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); font-size: 11px; color: var(--text-muted);
+            cursor: pointer; transition: all 0.12s;
+            max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            min-height: 28px; display: flex; align-items: center;
+        }
+        .source-chip:hover { border-color: var(--accent-dim); color: var(--text); }
+        .source-id { color: var(--accent-dim); margin-right: 4px; }
+        /* Chat input */
+        .chat-input-area { border-top: 1px solid var(--border); padding-top: 12px; flex-shrink: 0; }
+        .chat-input-row  { display: flex; gap: 8px; align-items: flex-end; }
+        .chat-textarea {
+            flex: 1; background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 10px 14px;
+            font-family: var(--mono); font-size: 16px; /* 16px: no iOS zoom */
+            color: var(--text); resize: none; outline: none;
+            min-height: 44px; max-height: 140px; line-height: 1.5; transition: border-color 0.15s;
+            -webkit-overflow-scrolling: touch;
+        }
+        .chat-textarea::placeholder { color: var(--text-dim); font-size: 13px; }
+        .chat-textarea:focus { border-color: var(--border-2); }
+        .chat-send {
+            padding: 0 18px; height: 44px;
+            background: rgba(232,160,32,0.1); border: 1px solid var(--accent-dim);
+            color: var(--accent); font-family: var(--mono); font-size: 12px;
+            cursor: pointer; border-radius: var(--radius); white-space: nowrap; transition: all 0.15s;
+            min-width: 64px;
+        }
+        .chat-send:hover:not(:disabled) { background: rgba(232,160,32,0.2); }
+        .chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
+        .chat-hint { font-size: 10px; color: var(--text-dim); text-align: right; margin-top: 6px; }
+
+        /* ── Bottom nav (mobile only) ───────────────────────────────────────────── */
+        .bottom-nav {
+            display: none;
+            position: fixed; bottom: 0; left: 0; right: 0;
+            height: var(--bottomnav-h);
+            background: var(--surface); border-top: 1px solid var(--border);
+            z-index: 100;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .bottom-nav-inner { display: flex; height: 100%; }
+        .bottom-tab {
+            flex: 1; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 3px; background: none; border: none;
+            color: var(--text-muted); font-family: var(--mono); font-size: 10px;
+            letter-spacing: 0.08em; cursor: pointer; transition: color 0.15s;
+            min-height: 44px;
+        }
+        .bottom-tab .btab-icon { font-size: 18px; line-height: 1; }
+        .bottom-tab.active { color: var(--accent); }
+
+        /* ── Empty state ────────────────────────────────────────────────────────── */
+        .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-dim); text-align: center; padding: 40px; }
+        .empty-icon  { font-size: 28px; opacity: 0.25; }
+        .empty-title { font-size: 13px; color: var(--text-muted); }
+        .empty-sub   { font-size: 11px; line-height: 1.7; }
+
+        /* ── Toast ──────────────────────────────────────────────────────────────── */
+        .toast {
+            position: fixed; bottom: 72px; right: 16px;
+            padding: 10px 16px; background: var(--surface-2); border: 1px solid var(--border-2);
+            border-radius: var(--radius); font-size: 12px; color: var(--text);
+            opacity: 0; transform: translateY(6px); transition: all 0.2s;
+            pointer-events: none; z-index: 300;
+        }
+        .toast.visible  { opacity: 1; transform: translateY(0); }
+        .toast.success  { border-color: var(--success); color: #5dbb80; }
+        .toast.error    { border-color: var(--danger);  color: #e27171; }
+
+        /* ── Responsive: Mobile ─────────────────────────────────────────────────── */
+        @media (max-width: 768px) {
+            /* Show hamburger */
+            .btn-hamburger { display: inline-flex; }
+
+            /* Hide desktop tabs — replaced by bottom nav */
+            .tab-group { display: none; }
+
+            /* Sidebar becomes fixed overlay drawer */
+            .sidebar {
+                position: fixed; top: var(--topbar-h); left: 0; bottom: 0;
+                z-index: 160; transform: translateX(-100%);
+            }
+            .sidebar.open { transform: translateX(0); }
+            .sidebar-backdrop { display: block; }
+
+            /* Main takes full width */
+            .main { width: 100%; }
+
+            /* Split editor: stack vertically, hide preview pane by default */
+            .editor-pane { flex-direction: column; }
+            .write-pane  { border-right: none; border-bottom: 1px solid var(--border); }
+            .write-pane.hidden   { display: none; }
+            .preview-pane.hidden { display: none; }
+
+            /* Show the mobile mode tabs */
+            .editor-mode-tabs { display: flex; }
+
+            /* Make toolbar scrollable — already is, just clarify */
+            .md-toolbar { padding: 6px 8px; }
+
+            /* Editor footer: stack tags above actions */
+            .editor-footer { flex-direction: column; align-items: stretch; gap: 8px; }
+            .editor-actions { justify-content: flex-end; }
+
+            /* Bottom nav visible */
+            .bottom-nav { display: block; }
+
+            /* Push content above bottom nav */
+            .app-shell { padding-bottom: var(--bottomnav-h); }
+
+            /* Toast above bottom nav */
+            .toast { bottom: calc(var(--bottomnav-h) + 8px); }
+
+            /* User bubbles full-width */
+            .msg-bubble.user { max-width: 100%; align-self: stretch; }
+
+            /* Chat inner — tighter padding */
+            .chat-inner { padding: 0 12px 12px; }
+        }
+        /* ── Admin view ─────────────────────────────────────────────────────────── */
+        .admin-inner {
+            flex: 1; overflow-y: auto; padding: 28px 32px;
+            display: flex; flex-direction: column; gap: 16px; max-width: 760px;
+        }
+        .admin-header { margin-bottom: 4px; }
+        .admin-title { font-size: 15px; font-weight: 500; color: var(--text); letter-spacing: 0.04em; }
+        .admin-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+
+        .admin-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 20px 24px;
+            display: flex; flex-direction: column; gap: 16px;
+        }
+        .admin-card-info { gap: 12px; }
+        .admin-card-header { display: flex; align-items: flex-start; gap: 16px; }
+        .admin-card-header > div { flex: 1; }
+        .admin-card-title { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 6px; }
+        .admin-card-desc { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+        .admin-card-desc code, .admin-info-list code {
+            font-family: var(--mono); color: var(--accent); font-size: 11px;
+            background: rgba(232,160,32,0.08); padding: 1px 5px; border-radius: 2px;
+        }
+
+        /* Progress bar */
+        .reindex-progress-wrap { display: flex; flex-direction: column; gap: 6px; }
+        .reindex-progress-bar {
+            height: 4px; background: var(--surface-2); border-radius: 2px; overflow: hidden;
+        }
+        .reindex-progress-fill {
+            height: 100%; width: 0%; background: var(--accent);
+            border-radius: 2px; transition: width 0.4s ease;
+        }
+        .reindex-progress-fill.indeterminate {
+            width: 30%; animation: indeterminate 1.4s ease-in-out infinite;
+        }
+        @keyframes indeterminate {
+            0%   { transform: translateX(-100%); }
+            100% { transform: translateX(400%); }
+        }
+        .reindex-progress-label { font-size: 11px; color: var(--text-muted); }
+
+        /* Stat grid */
+        .admin-stats {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+            padding-top: 4px; border-top: 1px solid var(--border);
+        }
+        .admin-stat { display: flex; flex-direction: column; gap: 3px; }
+        .admin-stat-val { font-size: 16px; font-weight: 500; color: var(--text); }
+        .admin-stat-key { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); }
+
+        /* Info list */
+        .admin-info-list {
+            font-size: 12px; color: var(--text-muted); line-height: 1.7;
+            padding-left: 16px; margin: 0;
+        }
+        .admin-info-list li { margin: 2px 0; }
+        .admin-warning {
+            font-size: 11px; color: var(--text-muted); background: rgba(232,160,32,0.06);
+            border: 1px solid var(--accent-dim); border-radius: var(--radius);
+            padding: 8px 12px; line-height: 1.6;
+        }
+        .admin-error {
+            font-size: 12px; color: var(--danger); background: rgba(192,57,43,0.08);
+            border: 1px solid rgba(192,57,43,0.3); border-radius: var(--radius);
+            padding: 8px 12px;
+        }
+
+        /* Topbar reindex badge */
+        .reindex-badge {
+            font-size: 11px; color: var(--accent); background: rgba(232,160,32,0.1);
+            border: 1px solid var(--accent-dim); border-radius: var(--radius);
+            padding: 2px 8px; cursor: pointer; display: flex; align-items: center; gap: 5px;
+            transition: background 0.15s;
+        }
+        .reindex-badge:hover { background: rgba(232,160,32,0.18); }
+        .reindex-spinner { animation: spin 1.2s linear infinite; display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 640px) {
+            .admin-inner { padding: 16px; }
+            .admin-stats { grid-template-columns: repeat(2, 1fr); }
+            .admin-card-header { flex-direction: column; }
+        }
+
+    </style>
+</head>
+<body>
+
+<!-- ── Topbar ────────────────────────────────────────────────────────────── -->
+<div class="topbar">
+    <button class="btn-hamburger" onclick="toggleSidebar()" aria-label="Toggle sidebar">☰</button>
+    <div class="topbar-brand">KB<span>/base</span></div>
+    <div class="tab-group">
+        <button class="tab active" onclick="switchView('notes')">Notes</button>
+        <button class="tab"        onclick="switchView('chat')">Chat</button>
+        <button class="tab"        onclick="switchView('admin')" id="tab-admin">Admin</button>
+    </div>
+    <div class="topbar-right">
+        <div class="reindex-badge" id="reindex-badge" style="display:none" onclick="switchView('admin')" title="Re-indexing in progress…">
+            <span class="reindex-spinner">◌</span> indexing…
+        </div>
+        <div class="status-dot" id="status-dot"></div>
+        <span class="status-label" id="status-label">connecting…</span>
+    </div>
+</div>
+
+<!-- ── Sidebar backdrop (mobile tap-to-close) ────────────────────────────── -->
+<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
+<div class="app-shell">
+
+    <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+    <aside class="sidebar" id="sidebar">
+        <div style="padding: 12px 16px 4px 16px;">
+            <input class="search-input" id="search-input" type="search" placeholder="Semantic search…" autocomplete="off">
+        </div>
+
+        <div class="tags-section">
+            <h3 style="font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim);">
+                Categories
+            </h3>
+            <div id="tag-filter-list">
+            </div>
+        </div>
+
+        <div class="notes-section">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim);">
+                    Notes <span id="note-count" style="color: var(--accent); margin-left: 4px;"></span>
+                </h3>
+                <button class="btn btn-sm" onclick="newNote()">+ New</button>
+            </div>
+            <div id="notes-list">
+            </div>
+        </div>
+    </aside>
+<!--    <aside class="sidebar" id="sidebar">-->
+<!--        <div class="sidebar-section">-->
+<!--            <div class="sidebar-label">Search</div>-->
+<!--            <input class="search-input" id="search-input" type="search" placeholder="Semantic search…" autocomplete="off">-->
+<!--        </div>-->
+
+<!--        <div class="sidebar-section">-->
+<!--            <div class="sidebar-label">Tags</div>-->
+<!--            <div class="tag-filter-list" id="tag-filter-list">-->
+<!--                <button class="tag-pill active" onclick="filterByTag('')">all</button>-->
+<!--            </div>-->
+<!--        </div>-->
+
+<!--        <div class="sidebar-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column;padding-bottom:0;">-->
+<!--            <div class="sidebar-label" style="display:flex;align-items:center;">-->
+<!--                Notes <span class="note-count" id="note-count"></span>-->
+<!--            </div>-->
+<!--            <div class="notes-list" id="notes-list">-->
+<!--                <div class="empty-state"><div class="empty-sub">Loading…</div></div>-->
+<!--            </div>-->
+<!--        </div>-->
+
+<!--        <div class="sidebar-footer">-->
+<!--            <button class="btn-new" onclick="newNote(); closeSidebar()">+ New note</button>-->
+<!--        </div>-->
+<!--    </aside>-->
+
+    <!-- ── Main content ────────────────────────────────────────────────────── -->
+    <div class="main">
+
+        <!-- Notes / editor view -->
+        <div class="view active" id="view-notes">
+
+            <!-- Markdown toolbar -->
+            <div class="md-toolbar" id="md-toolbar">
+                <button class="md-btn" onclick="md('**','**','bold')"        title="Bold (Ctrl+B)"><b>B</b></button>
+                <button class="md-btn" onclick="md('*','*','italic')"        title="Italic (Ctrl+I)"><i>I</i></button>
+                <button class="md-btn" onclick="md('`','`','code')"          title="Inline code">&#96;c&#96;</button>
+                <button class="md-btn" onclick="mdBlock('```\n','\n```')"    title="Code block">⌥&lt;&gt;</button>
+                <div class="md-toolbar-sep"></div>
+                <button class="md-btn" onclick="mdLine('## ')"               title="Heading 2">H2</button>
+                <button class="md-btn" onclick="mdLine('### ')"              title="Heading 3">H3</button>
+                <div class="md-toolbar-sep"></div>
+                <button class="md-btn" onclick="mdLine('- ')"                title="Bullet list">— ul</button>
+                <button class="md-btn" onclick="mdLine('1. ')"               title="Ordered list">1.</button>
+                <button class="md-btn" onclick="mdLine('> ')"                title="Blockquote">&gt;</button>
+                <div class="md-toolbar-sep"></div>
+                <button class="md-btn" onclick="mdHr()"                      title="Horizontal rule">hr</button>
+                <button class="md-btn" onclick="mdLink()"                    title="Insert link">🔗</button>
+            </div>
+
+            <!-- Mobile write/preview tabs -->
+            <div class="editor-mode-tabs" id="editor-mode-tabs">
+                <button class="mode-tab active" onclick="setEditorMode('write')" id="mode-write">Write</button>
+                <button class="mode-tab"        onclick="setEditorMode('preview')" id="mode-preview">Preview</button>
+            </div>
+
+            <!-- Editor split pane -->
+            <div class="editor-pane">
+                <div class="write-pane" id="write-pane">
+          <textarea class="note-textarea" id="note-content"
+                    placeholder="# Title&#10;&#10;Start writing in Markdown…&#10;&#10;```go&#10;// code blocks are supported&#10;```"
+                    spellcheck="true"></textarea>
+                </div>
+                <div class="preview-pane" id="preview-pane">
+                    <div class="preview-empty" id="preview-empty">Preview will appear here…</div>
+                    <div class="md-preview" id="preview-content" style="display:none"></div>
+                </div>
+            </div>
+
+            <!-- Footer: state + tags + actions -->
+            <div class="editor-footer">
+                <span class="editor-state" id="editor-state">new note</span>
+
+                <div class="tag-input-row" id="tag-input-row"
+                     onclick="document.getElementById('tag-text-input').focus()">
+                    <input class="tag-text-input" id="tag-text-input"
+                           placeholder="Add tag, press Enter…" autocomplete="off">
+                </div>
+
+                <div class="editor-actions">
+                    <button class="btn btn-danger"  id="btn-delete" onclick="deleteNote()" disabled>Delete</button>
+                    <button class="btn btn-primary" id="btn-save"   onclick="saveNote()">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat view -->
+        <div class="view" id="view-chat">
+            <div class="chat-inner">
+                <div class="chat-header">
+                    <div class="chat-header-title">Chat with your knowledge base</div>
+                </div>
+
+                <div class="messages" id="messages">
+                    <div class="empty-state">
+                        <div class="empty-icon">◈</div>
+                        <div class="empty-title">Ask anything</div>
+                        <div class="empty-sub">Your notes are indexed and embedded.<br>Relevant notes are used as context automatically.</div>
+                    </div>
+                </div>
+
+                <div class="chat-input-area">
+                    <div class="chat-input-row">
+            <textarea class="chat-textarea" id="chat-input"
+                      placeholder="Ask a question about your notes…"
+                      rows="1"></textarea>
+                        <button class="chat-send" id="chat-send" onclick="sendChat()">Send</button>
+                    </div>
+                    <div class="chat-hint">Enter to send · Shift+Enter for newline</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin view -->
+        <div class="view" id="view-admin">
+            <div class="admin-inner">
+                <div class="admin-header">
+                    <div class="admin-title">Admin</div>
+                    <div class="admin-subtitle">Manage embeddings and vector index</div>
+                </div>
+
+                <!-- Re-index card -->
+                <div class="admin-card">
+                    <div class="admin-card-header">
+                        <div>
+                            <div class="admin-card-title">Re-index Notes</div>
+                            <div class="admin-card-desc">
+                                Re-embeds all notes using the current model (<code id="admin-embed-model">—</code>).
+                                Run this after switching embedding models or changing the dimension.
+                                The job runs in the background — safe to navigate away.
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" id="btn-reindex" onclick="startReindex()">Start</button>
+                    </div>
+
+                    <!-- Progress bar — hidden when idle -->
+                    <div class="reindex-progress-wrap" id="reindex-progress-wrap" style="display:none">
+                        <div class="reindex-progress-bar">
+                            <div class="reindex-progress-fill" id="reindex-progress-fill"></div>
+                        </div>
+                        <div class="reindex-progress-label" id="reindex-progress-label"></div>
+                    </div>
+
+                    <!-- Status grid -->
+                    <div class="admin-stats" id="admin-stats" style="display:none">
+                        <div class="admin-stat">
+                            <div class="admin-stat-val" id="stat-status">—</div>
+                            <div class="admin-stat-key">status</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-val" id="stat-completed">—</div>
+                            <div class="admin-stat-key">embedded</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-val" id="stat-failed">—</div>
+                            <div class="admin-stat-key">failed</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-val" id="stat-total">—</div>
+                            <div class="admin-stat-key">total</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-val" id="stat-started">—</div>
+                            <div class="admin-stat-key">started</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-val" id="stat-finished">—</div>
+                            <div class="admin-stat-key">finished</div>
+                        </div>
+                    </div>
+
+                    <!-- Error message -->
+                    <div class="admin-error" id="admin-error" style="display:none"></div>
+                </div>
+
+                <!-- Info card -->
+                <div class="admin-card admin-card-info">
+                    <div class="admin-card-title">When to re-index</div>
+                    <ul class="admin-info-list">
+                        <li>You switched to a different embedding model</li>
+                        <li>You changed <code>EMBEDDING_DIMENSION</code> in your deployment</li>
+                        <li>Notes were imported directly into the database without embeddings</li>
+                        <li>The vector index was dropped or recreated</li>
+                    </ul>
+                    <div class="admin-warning">
+                        ⚠ Changing the embedding model invalidates all existing embeddings.
+                        After re-indexing, semantic search and chat context will use the new model.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- .main -->
+</div><!-- .app-shell -->
+
+<!-- ── Bottom nav (mobile only) ─────────────────────────────────────────── -->
+<nav class="bottom-nav">
+    <div class="bottom-nav-inner">
+        <button class="bottom-tab active" id="btab-notes" onclick="switchView('notes')">
+            <span class="btab-icon">📝</span>
+            <span>Notes</span>
+        </button>
+        <button class="bottom-tab" id="btab-chat" onclick="switchView('chat')">
+            <span class="btab-icon">💬</span>
+            <span>Chat</span>
+        </button>
+        <button class="bottom-tab" id="btab-admin" onclick="switchView('admin')">
+            <span class="btab-icon">⚙︎</span>
+            <span>Admin</span>
+        </button>
+    </div>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+    // ── Markdown setup ────────────────────────────────────────────────────────────
+    marked.setOptions({ breaks: true, gfm: true });
+
+    // Wire highlight.js into marked for fenced code blocks.
+    const renderer = new marked.Renderer();
+    renderer.code = function(code, lang) {
+        const language = (lang && hljs.getLanguage(lang)) ? lang : 'plaintext';
+        let highlighted;
+        try {
+            highlighted = hljs.highlight(String(code), { language, ignoreIllegals: true }).value;
+        } catch {
+            highlighted = esc(String(code));
+        }
+
+        return `<div class="code-wrapper">
+            <button class="copy-btn" onclick="copyCode(this)" title="Copy code">Copy</button>
+            <pre><code class="hljs language-${language}">${highlighted}</code></pre>
+        </div>`;
+    };
+    marked.use({ renderer });
+
+    function renderMarkdown(md) {
+        return marked.parse(md || '');
+    }
+
+    // Strip markdown to plain text for sidebar previews.
+    function stripMd(md) {
+        return md
+            .replace(/```[\s\S]*?```/g, '[code]')
+            .replace(/`[^`]+`/g, '$&')
+            .replace(/#{1,6}\s+/g, '')
+            .replace(/\*\*(.+?)\*\*/g, '$1')
+            .replace(/\*(.+?)\*/g, '$1')
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            .replace(/>\s+/g, '')
+            .replace(/[-*+]\s+/g, '')
+            .replace(/\n+/g, ' ')
+            .trim();
+    }
+
+    // ── State ─────────────────────────────────────────────────────────────────────
+    const state = {
+        notes: [], tags: [],
+        selectedId: null,
+        activeTag: '',
+        currentTags: [],
+        isStreaming: false,
+        editorMode: 'write', // 'write' | 'preview' (mobile only)
+    };
+
+    // ── Init ──────────────────────────────────────────────────────────────────────
+    async function init() {
+        setupKeyboard();
+        await Promise.all([loadNotes(), loadTags()]);
+        checkHealth();
+        setInterval(checkHealth, 30_000);
+        // Background poll: keeps topbar badge updated even when not on admin tab.
+        // loadAdminStatus auto-starts active polling if a job is running.
+        const st = await loadAdminStatus();
+        if (st && st.status === 'running') startAdminPolling();
+        setInterval(loadAdminStatus, 10_000); // light background refresh
+    }
+
+    // ── Health ────────────────────────────────────────────────────────────────────
+    async function checkHealth() {
+        const dot = document.getElementById('status-dot');
+        const lbl = document.getElementById('status-label');
+        try {
+            const r = await fetch('/api/health');
+            dot.className = r.ok ? 'status-dot ok' : 'status-dot err';
+            lbl.textContent = r.ok ? 'connected' : 'error';
+        } catch {
+            dot.className = 'status-dot err';
+            lbl.textContent = 'offline';
+        }
+    }
+
+    // ── Copy code button logic ────────────────────────────────────────────────────
+    function copyCode(btn) {
+        // Find the adjacent <pre> block and get the <code> element inside it
+        const codeBlock = btn.nextElementSibling.querySelector('code');
+        if (!codeBlock) return;
+
+        // textContent cleanly grabs the raw text without the HTML highlighting tags
+        navigator.clipboard.writeText(codeBlock.textContent).then(() => {
+            const originalText = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(() => {
+                btn.textContent = originalText;
+            }, 2000);
+        }).catch(err => {
+            console.error('Failed to copy code: ', err);
+            toast('Failed to copy code.', 'error');
+        });
+    }
+
+    // ── View switching ────────────────────────────────────────────────────────────
+    const VIEWS = ['notes', 'chat', 'admin'];
+    function switchView(name) {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById('view-' + name).classList.add('active');
+        // Desktop tabs
+        document.querySelectorAll('.tab').forEach((t, i) => {
+            t.classList.toggle('active', VIEWS[i] === name);
+        });
+        // Mobile bottom tabs
+        VIEWS.forEach(v => {
+            const el = document.getElementById('btab-' + v);
+            if (el) el.classList.toggle('active', v === name);
+        });
+        // Start polling when admin tab is opened
+        if (name === 'admin') {
+            loadAdminStatus();
+            startAdminPolling();
+        }
+    }
+
+    // ── Sidebar (mobile) ──────────────────────────────────────────────────────────
+    function toggleSidebar() {
+        const open = document.getElementById('sidebar').classList.toggle('open');
+        const bd = document.getElementById('sidebar-backdrop');
+        bd.classList.toggle('visible', open);
+    }
+    function closeSidebar() {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebar-backdrop').classList.remove('visible');
+    }
+
+    // ── Notes ─────────────────────────────────────────────────────────────────────
+    async function loadNotes() {
+        const params = new URLSearchParams();
+        if (state.activeTag) params.set('tag', state.activeTag);
+        const search = document.getElementById('search-input').value.trim();
+        if (search) params.set('search', search);
+
+        try {
+            const r = await fetch('/api/notes?' + params);
+            state.notes = await r.json();
+        } catch { state.notes = []; }
+        renderNoteList();
+    }
+
+    async function loadTags() {
+        try {
+            const r = await fetch('/api/tags');
+            state.tags = await r.json();
+        } catch { state.tags = []; }
+        renderTagFilters();
+    }
+
+    function renderNoteList() {
+        const list = document.getElementById('notes-list');
+        document.getElementById('note-count').textContent = state.notes.length || '';
+
+        if (!state.notes.length) {
+            list.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">○</div>
+      <div class="empty-title">No notes yet</div>
+      <div class="empty-sub">Click "+ New note" to get started.</div>
+    </div>`;
+            return;
+        }
+
+        list.innerHTML = state.notes.map(n => {
+            const active  = n.id === state.selectedId ? 'active' : '';
+            const date    = new Date(n.updated_at).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+            const tags    = (n.tags || []).slice(0,3).map(t => `<span class="note-tag">${esc(t)}</span>`).join('');
+            const preview = stripMd(n.content).slice(0, 100);
+            return `<div class="note-item ${active}" onclick="selectNote(${n.id})">
+      <div class="note-preview">${esc(preview)}</div>
+      <div class="note-meta"><span class="note-date">${date}</span>${tags}</div>
+    </div>`;
+        }).join('');
+    }
+
+    function renderTagFilters() {
+        const container = document.getElementById('tag-filter-list');
+        // Override the previous flex-wrap layout so the tree stacks vertically
+        container.style.display = 'block';
+
+        // 1. Build a nested tree object from the flat tags array
+        const tree = {};
+        state.tags.forEach(tagPath => {
+            const parts = tagPath.split('/');
+            let current = tree;
+            let pathSoFar = '';
+
+            parts.forEach((part) => {
+                pathSoFar = pathSoFar ? pathSoFar + '/' + part : part;
+                if (!current[part]) {
+                    current[part] = { _full: pathSoFar, children: {} };
+                }
+                current = current[part].children;
+            });
+        });
+
+        // 2. Recursive function to generate HTML for the tree
+        function renderNode(key, node) {
+            const hasChildren = Object.keys(node.children).length > 0;
+            const isActive = state.activeTag === node._full;
+            // Auto-expand if the active tag is this node, or a child of this node
+            const isExpanded = state.activeTag.startsWith(node._full + '/') || isActive;
+
+            let html = `<div class="tag-node">`;
+            html += `<div class="tag-row ${isActive ? 'active' : ''}">`;
+
+            if (hasChildren) {
+                html += `<div class="tag-toggle ${isExpanded ? 'expanded' : ''}" onclick="toggleTagNode(event, this)">▶</div>`;
+            } else {
+                html += `<div style="width: 14px; flex-shrink: 0;"></div>`; // Spacer for alignment
+            }
+
+            html += `<div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" onclick="filterByTag('${esc(node._full)}')">${esc(key)}</div>`;
+            html += `</div>`;
+
+            if (hasChildren) {
+                html += `<div class="tag-children ${isExpanded ? 'expanded' : ''}">`;
+                // Sort children alphabetically
+                for (const childKey of Object.keys(node.children).sort()) {
+                    html += renderNode(childKey, node.children[childKey]);
+                }
+                html += `</div>`;
+            }
+
+            html += `</div>`;
+            return html;
+        }
+
+        // 3. Assemble the final HTML
+        let html = `<div class="tag-tree">`;
+        html += `<div class="tag-row ${state.activeTag === '' ? 'active' : ''}" onclick="filterByTag('')">
+                    <div style="width:14px;"></div><div style="flex:1">all notes</div>
+                 </div>`;
+
+        for (const key of Object.keys(tree).sort()) {
+            html += renderNode(key, tree[key]);
+        }
+        html += `</div>`;
+
+        container.innerHTML = html;
+    }
+
+    // Helper to animate/toggle the collapse state
+    window.toggleTagNode = function(e, el) {
+        e.stopPropagation(); // Prevent clicking the chevron from triggering the filter
+        el.classList.toggle('expanded');
+        const children = el.closest('.tag-node').querySelector('.tag-children');
+        if (children) children.classList.toggle('expanded');
+    };
+
+    function filterByTag(tag) {
+        state.activeTag = tag;
+        loadNotes();
+        renderTagFilters();
+    }
+
+    function selectNote(id) {
+        const n = state.notes.find(n => n.id === id);
+        if (!n) return;
+        state.selectedId = id;
+        state.currentTags = [...(n.tags || [])];
+        document.getElementById('note-content').value = n.content;
+        document.getElementById('editor-state').textContent = `note #${id}`;
+        document.getElementById('btn-delete').disabled = false;
+        renderTagChips();
+        updatePreview(n.content);
+        renderNoteList();
+        switchView('notes');
+        closeSidebar();
+    }
+
+    function newNote() {
+        state.selectedId = null;
+        state.currentTags = [];
+        document.getElementById('note-content').value = '';
+        document.getElementById('editor-state').textContent = 'new note';
+        document.getElementById('btn-delete').disabled = true;
+        renderTagChips();
+        updatePreview('');
+        renderNoteList();
+    }
+
+    async function saveNote() {
+        const content = document.getElementById('note-content').value.trim();
+        if (!content) { toast('Content cannot be empty.', 'error'); return; }
+
+        const btn = document.getElementById('btn-save');
+        btn.disabled = true; btn.textContent = 'Saving…';
+
+        const body = JSON.stringify({ content, tags: state.currentTags });
+        try {
+            let r;
+            if (state.selectedId) {
+                r = await fetch(`/api/notes/${state.selectedId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body });
+                if (!r.ok) throw new Error('Update failed');
+                toast('Note updated.', 'success');
+            } else {
+                r = await fetch('/api/notes', { method:'POST', headers:{'Content-Type':'application/json'}, body });
+                if (!r.ok) throw new Error('Create failed');
+                const d = await r.json();
+                state.selectedId = d.id;
+                document.getElementById('editor-state').textContent = `note #${d.id}`;
+                document.getElementById('btn-delete').disabled = false;
+                toast('Note saved.', 'success');
+            }
+            await Promise.all([loadNotes(), loadTags()]);
+        } catch(e) {
+            toast(e.message, 'error');
+        } finally {
+            btn.disabled = false; btn.textContent = 'Save';
+        }
+    }
+
+    async function deleteNote() {
+        if (!state.selectedId) return;
+        if (!confirm(`Delete note #${state.selectedId}? This cannot be undone.`)) return;
+        try {
+            const r = await fetch(`/api/notes/${state.selectedId}`, { method:'DELETE' });
+            if (!r.ok) throw new Error('Delete failed');
+            toast('Note deleted.', 'success');
+            newNote();
+            await Promise.all([loadNotes(), loadTags()]);
+        } catch(e) { toast(e.message, 'error'); }
+    }
+
+    // ── Live preview ──────────────────────────────────────────────────────────────
+    let previewTimer;
+    function schedulePreview() {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(() => updatePreview(document.getElementById('note-content').value), 120);
+    }
+
+    function updatePreview(md) {
+        const empty   = document.getElementById('preview-empty');
+        const content = document.getElementById('preview-content');
+        if (!md || !md.trim()) {
+            empty.style.display = '';
+            content.style.display = 'none';
+            return;
+        }
+        empty.style.display = 'none';
+        content.style.display = '';
+        content.innerHTML = renderMarkdown(md);
+    }
+
+    document.getElementById('note-content').addEventListener('input', function() {
+        schedulePreview();
+    });
+
+    // ── Mobile editor mode tabs ───────────────────────────────────────────────────
+    function setEditorMode(mode) {
+        state.editorMode = mode;
+        document.getElementById('mode-write').classList.toggle('active', mode === 'write');
+        document.getElementById('mode-preview').classList.toggle('active', mode === 'preview');
+        document.getElementById('write-pane').classList.toggle('hidden', mode !== 'write');
+        document.getElementById('preview-pane').classList.toggle('hidden', mode !== 'preview');
+        if (mode === 'preview') {
+            updatePreview(document.getElementById('note-content').value);
+        }
+    }
+
+    // ── Markdown toolbar helpers ──────────────────────────────────────────────────
+    // Wrap selection (or placeholder) with before/after tokens.
+    function md(before, after, placeholder) {
+        const ta = document.getElementById('note-content');
+        const s = ta.selectionStart, e = ta.selectionEnd;
+        const sel = ta.value.slice(s, e) || placeholder;
+        ta.setRangeText(before + sel + after, s, e, 'end');
+        ta.focus();
+        schedulePreview();
+    }
+
+    // Prepend before to the current line.
+    function mdLine(before) {
+        const ta = document.getElementById('note-content');
+        const s = ta.selectionStart;
+        const lineStart = ta.value.lastIndexOf('\n', s - 1) + 1;
+        ta.setRangeText(before, lineStart, lineStart, 'end');
+        ta.focus();
+        schedulePreview();
+    }
+
+    // Insert a fenced block.
+    function mdBlock(open, close) {
+        const ta = document.getElementById('note-content');
+        const s = ta.selectionStart, e = ta.selectionEnd;
+        const sel = ta.value.slice(s, e) || 'code here';
+        ta.setRangeText(open + sel + close, s, e, 'end');
+        ta.focus();
+        schedulePreview();
+    }
+
+    function mdHr() {
+        const ta = document.getElementById('note-content');
+        const s = ta.selectionStart;
+        ta.setRangeText('\n---\n', s, s, 'end');
+        ta.focus();
+        schedulePreview();
+    }
+
+    function mdLink() {
+        const ta = document.getElementById('note-content');
+        const s = ta.selectionStart, e = ta.selectionEnd;
+        const sel = ta.value.slice(s, e) || 'link text';
+        ta.setRangeText(`[${sel}](url)`, s, e, 'end');
+        ta.focus();
+        schedulePreview();
+    }
+
+    // Keyboard shortcuts
+    function setupKeyboard() {
+        document.getElementById('note-content').addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+                if (e.key === 'b') { e.preventDefault(); md('**','**','bold'); }
+                if (e.key === 'i') { e.preventDefault(); md('*','*','italic'); }
+                if (e.key === 'k') { e.preventDefault(); mdLink(); }
+                if (e.key === 'e') { e.preventDefault(); md('`','`','code'); }
+            }
+            // Tab key → insert 2 spaces (useful for code blocks)
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const ta = e.target, s = ta.selectionStart;
+                ta.setRangeText('  ', s, s, 'end');
+                schedulePreview();
+            }
+        });
+    }
+
+    // ── Tag chips ─────────────────────────────────────────────────────────────────
+    function renderTagChips() {
+        const row = document.getElementById('tag-input-row');
+        row.querySelectorAll('.tag-chip').forEach(c => c.remove());
+        const input = document.getElementById('tag-text-input');
+        state.currentTags.forEach(tag => {
+            const chip = document.createElement('span');
+            chip.className = 'tag-chip';
+            chip.innerHTML = `${esc(tag)}<button onclick="removeTag('${esc(tag)}')" title="Remove">×</button>`;
+            row.insertBefore(chip, input);
+        });
+    }
+    function removeTag(tag) {
+        state.currentTags = state.currentTags.filter(t => t !== tag);
+        renderTagChips();
+    }
+    document.getElementById('tag-text-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault();
+            const val = e.target.value.trim().replace(/,/g,'').toLowerCase();
+            if (val && !state.currentTags.includes(val)) { state.currentTags.push(val); renderTagChips(); }
+            e.target.value = '';
+        }
+        if (e.key === 'Backspace' && !e.target.value && state.currentTags.length) {
+            state.currentTags.pop(); renderTagChips();
+        }
+    });
+
+    // ── Semantic search (debounced) ───────────────────────────────────────────────
+    let searchTimer;
+    document.getElementById('search-input').addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(loadNotes, 350);
+    });
+
+    // ── Chat ──────────────────────────────────────────────────────────────────────
+    async function sendChat() {
+        if (state.isStreaming) return;
+        const input = document.getElementById('chat-input');
+        const query = input.value.trim();
+        if (!query) return;
+
+        input.value = '';
+        autoResize(input);
+        state.isStreaming = true;
+        document.getElementById('chat-send').disabled = true;
+
+        const msgs = document.getElementById('messages');
+        msgs.querySelector('.empty-state')?.remove();
+
+        appendMessage('user', query);
+        const assistantEl = appendMessage('assistant', '');
+        const bubble = assistantEl.querySelector('.msg-bubble');
+        bubble.classList.add('streaming');
+
+        let accumulated = '';
+
+        try {
+            const resp = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query }),
+            });
+            if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+
+            const reader  = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const parts = buffer.split('\n\n');
+                buffer = parts.pop() ?? '';
+
+                for (const part of parts) {
+                    if (!part.startsWith('data: ')) continue;
+                    let data;
+                    try { data = JSON.parse(part.slice(6)); } catch { continue; }
+
+                    if (data.sources !== undefined) {
+                        renderSources(assistantEl, data.sources);
+                        continue;
+                    }
+                    if (data.error) {
+                        accumulated += `\n\n⚠ ${data.error}`;
+                    }
+                    if (data.chunk !== undefined) {
+                        accumulated += data.chunk;
+                        // Re-render markdown on each token — marked is fast enough.
+                        bubble.innerHTML = `<div class="md-preview">${renderMarkdown(accumulated)}</div>`;
+                        msgs.scrollTop = msgs.scrollHeight;
+                    }
+                }
+            }
+        } catch(err) {
+            bubble.innerHTML = `<div class="md-preview">⚠ ${esc(err.message)}</div>`;
+        } finally {
+            bubble.classList.remove('streaming');
+            state.isStreaming = false;
+            document.getElementById('chat-send').disabled = false;
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+    }
+
+    function appendMessage(role, text) {
+        const msgs = document.getElementById('messages');
+        const el = document.createElement('div');
+        el.className = 'message';
+        el.innerHTML = `
+    <div class="msg-role ${role}">${role === 'user' ? 'you' : 'assistant'}</div>
+    <div class="msg-bubble ${role}">${text ? `<div class="md-preview">${renderMarkdown(text)}</div>` : ''}</div>`;
+        msgs.appendChild(el);
+        msgs.scrollTop = msgs.scrollHeight;
+        return el;
+    }
+
+    function renderSources(msgEl, sources) {
+        if (!sources?.length) return;
+        const div = document.createElement('div');
+        div.className = 'sources';
+        div.innerHTML = `
+    <div class="sources-label">Context from ${sources.length} note${sources.length !== 1 ? 's' : ''}</div>
+    <div class="sources-list">${sources.map(s => {
+            const tags = (s.tags||[]).slice(0,2).map(t=>`<span style="color:var(--accent-dim)"> #${esc(t)}</span>`).join('');
+            return `<div class="source-chip" onclick="selectNote(${s.id});switchView('notes')" title="${esc(s.preview)}">
+        <span class="source-id">#${s.id}</span>${esc(s.preview.slice(0,36))}…${tags}
+      </div>`;
+        }).join('')}</div>`;
+        msgEl.insertBefore(div, msgEl.querySelector('.msg-bubble'));
+    }
+
+    // Auto-resize chat textarea
+    function autoResize(el) {
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+    }
+    document.getElementById('chat-input').addEventListener('input', function() { autoResize(this); });
+    document.getElementById('chat-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+    });
+
+    // ── Admin / Re-index ──────────────────────────────────────────────────────────
+    let adminPollTimer = null;
+
+    function startAdminPolling() {
+        if (adminPollTimer) return; // already polling
+        adminPollTimer = setInterval(async () => {
+            const st = await loadAdminStatus();
+            // Stop polling once the job is no longer running
+            if (st && st.status !== 'running') {
+                clearInterval(adminPollTimer);
+                adminPollTimer = null;
+            }
+        }, 2000);
+    }
+
+    async function loadAdminStatus() {
+        try {
+            const r = await fetch('/api/admin/reindex/status');
+            if (!r.ok) return null;
+            const st = await r.json();
+            renderAdminStatus(st);
+            updateReindexBadge(st);
+            return st;
+        } catch { return null; }
+    }
+
+    function renderAdminStatus(st) {
+        const wrap  = document.getElementById('reindex-progress-wrap');
+        const fill  = document.getElementById('reindex-progress-fill');
+        const label = document.getElementById('reindex-progress-label');
+        const stats = document.getElementById('admin-stats');
+        const errEl = document.getElementById('admin-error');
+        const btn   = document.getElementById('btn-reindex');
+
+        // Embed model label (best-effort from env — backend could expose this)
+        // For now, reflect whatever the Go default/env is via a meta tag we inject
+        const modelMeta = document.querySelector('meta[name="embed-model"]');
+        if (modelMeta) document.getElementById('admin-embed-model').textContent = modelMeta.content;
+
+        if (st.status === 'idle') {
+            wrap.style.display = 'none';
+            stats.style.display = 'none';
+            errEl.style.display = 'none';
+            btn.disabled = false;
+            btn.textContent = 'Start';
+            return;
+        }
+
+        // Show progress bar
+        wrap.style.display = 'flex';
+        stats.style.display = 'grid';
+        errEl.style.display = 'none';
+
+        const pct = st.total > 0
+            ? Math.round((st.completed + st.failed) / st.total * 100)
+            : 0;
+
+        if (st.status === 'running') {
+            btn.disabled = true;
+            btn.textContent = 'Running…';
+            if (st.total > 0) {
+                fill.style.width = pct + '%';
+                fill.classList.remove('indeterminate');
+                label.textContent = `${st.completed + st.failed} / ${st.total} notes · ${pct}%` +
+                    (st.failed > 0 ? ` · ${st.failed} failed` : '');
+            } else {
+                fill.style.width = '0%';
+                fill.classList.add('indeterminate');
+                label.textContent = 'Counting notes…';
+            }
+        } else if (st.status === 'done') {
+            btn.disabled = false;
+            btn.textContent = 'Re-run';
+            fill.classList.remove('indeterminate');
+            fill.style.width = '100%';
+            label.textContent = `Done · ${st.completed} embedded` +
+                (st.failed > 0 ? `, ${st.failed} failed` : '');
+        } else if (st.status === 'error') {
+            btn.disabled = false;
+            btn.textContent = 'Retry';
+            fill.classList.remove('indeterminate');
+            fill.style.width = '0%';
+            label.textContent = 'Job failed';
+            errEl.textContent = '⚠ ' + (st.error || 'Unknown error');
+            errEl.style.display = 'block';
+        }
+
+        // Stat grid
+        const fmtTime = iso => iso ? new Date(iso).toLocaleTimeString() : '—';
+        document.getElementById('stat-status').textContent    = st.status;
+        document.getElementById('stat-completed').textContent = st.completed ?? '—';
+        document.getElementById('stat-failed').textContent    = st.failed ?? '—';
+        document.getElementById('stat-total').textContent     = st.total || '—';
+        document.getElementById('stat-started').textContent   = fmtTime(st.started_at);
+        document.getElementById('stat-finished').textContent  = fmtTime(st.finished_at);
+    }
+
+    // Shows/hides the amber "indexing…" badge in the topbar when running off-tab
+    function updateReindexBadge(st) {
+        document.getElementById('reindex-badge').style.display =
+            st.status === 'running' ? 'flex' : 'none';
+    }
+
+    async function startReindex() {
+        const btn = document.getElementById('btn-reindex');
+        btn.disabled = true;
+        btn.textContent = 'Starting…';
+        try {
+            const r = await fetch('/api/admin/reindex', { method: 'POST' });
+            if (r.status === 409) {
+                toast('Re-index already running', 'error');
+                btn.disabled = false;
+                btn.textContent = 'Running…';
+                return;
+            }
+            if (!r.ok) throw new Error('Server error ' + r.status);
+            toast('Re-index started');
+            const st = await r.json();
+            renderAdminStatus(st);
+            updateReindexBadge(st);
+            startAdminPolling();
+        } catch (err) {
+            toast('Failed to start: ' + err.message, 'error');
+            btn.disabled = false;
+            btn.textContent = 'Start';
+        }
+    }
+
+    // ── Utilities ─────────────────────────────────────────────────────────────────
+    function esc(s) {
+        return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    let toastTimer;
+    function toast(msg, type='') {
+        const el = document.getElementById('toast');
+        el.textContent = msg; el.className = `toast ${type} visible`;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.remove('visible'), 3000);
+    }
+
+    // ── Start ─────────────────────────────────────────────────────────────────────
+    init();
+</script>
+</body>
+</html>

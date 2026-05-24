@@ -1,0 +1,23 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Docs and config files that aren't needed in the image
+*.md
+*.yaml
+*.yml
+Dockerfile
+.dockerignore
+
+# Kubernetes manifests
+k8s/
+
+# Local development artifacts
+*.env
+.env.*
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/
