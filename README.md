@@ -21,3 +21,5 @@ Docs are coming, mainly focused on kubernetes and maybe docker-compose for local
 * **Language:** Go - well, and HTML.
 * **LLM / Embeddings Backend:** Currently only: Ollama (e.g., `granite4.1` or `llama3`)
 * **Vector Store:** Currently PSQL and Valkey
+
+![AI-KnowledgeBase](assets/app-image.png "AI-KnowledgeBase")
