@@ -8,6 +8,8 @@ I built it mainly based on my personal needs and desires, and I am running it on
 Kubernetes Environment with some tooling already in place (cnpg, valkey, you name it..).
 Docs are coming, mainly focused on kubernetes and maybe docker-compose for local usages.
 
+![Overview](./assets/overview.png)
+
 ## 🚀 Features
 
 * **Document Indexing:** Easily parse and ingest markdown notes.
