@@ -7,6 +7,11 @@ button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
 /* ── Design tokens ─────────────────────────────────────────────────────── */
 :root {
+    /* Tells the browser this is a dark UI — without this, form controls
+       like <textarea> and <input> render with light-mode defaults
+       (white background, dark scrollbars) regardless of our CSS. */
+    color-scheme: dark;
+
     --bg:         #0e0e0e;
     --surface:    #161616;
     --surface-2:  #1f1f1f;
@@ -78,13 +83,8 @@ body { height: 100dvh; }
     background: rgba(0,0,0,0.6);
     z-index: 150;
     opacity: 0; transition: opacity 0.25s;
-    pointer-events: none;
-    transition: opacity 0.2s ease;
 }
-.sidebar-backdrop.visible {
-    opacity: 1;
-    pointer-events: auto;
-}
+.sidebar-backdrop.visible { opacity: 1; }
 
 /* ── Sidebar ────────────────────────────────────────────────────────────── */
 /* Sidebar Parent Structure */
@@ -266,27 +266,25 @@ body { height: 100dvh; }
 .mode-tab.active { border-color: var(--accent-dim); color: var(--accent); background: rgba(232,160,32,0.07); }
 
 /* ── Editor pane ────────────────────────────────────────────────────────── */
-.editor-pane { flex-direction: column; height: 100%; }
-
-.write-pane {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+.editor-pane {
     flex: 1;
     display: flex;
-    flex-direction: column;
     height: 100%;
+    min-height: 0;
+    overflow: hidden;
 }
-
-/* Strict layout removal when hidden */
-.write-pane.hidden   { display: none !important; }
-.preview-pane.hidden { display: none !important; }
-
-/* Force the textarea to fully expand and inherit touch scrolling */
+/* Write side */
+.write-pane {
+    flex: 1; display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
+    min-width: 0;
+}
 .note-textarea {
-    flex: 1;
-    height: 100%;
-    min-height: 200px;
-    overflow-y: auto;
+    flex: 1; padding: 20px;
+    background: var(--bg); border: none; outline: none;
+    font-family: var(--mono); font-size: 14px; line-height: 1.75;
+    color: var(--text); resize: none;
+    -webkit-overflow-scrolling: touch;
 }
 .note-textarea::placeholder { color: var(--text-dim); font-style: italic; }
 

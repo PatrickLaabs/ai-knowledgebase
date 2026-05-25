@@ -22,12 +22,12 @@
         <div class="login-subtitle">Your personal knowledge base</div>
 
         <div class="login-tabs">
-            <button class="login-tab active" data-tab="login"    onclick="switchAuthTab('login')">Sign in</button>
-            <button class="login-tab"        data-tab="register" onclick="switchAuthTab('register')" id="login-tab-register">Create account</button>
+            <button class="login-tab active" type="button" data-tab="login"    onclick="switchAuthTab('login')">Sign in</button>
+            <button class="login-tab"        type="button" data-tab="register" onclick="switchAuthTab('register')" id="login-tab-register">Create account</button>
         </div>
 
         <!-- Login form -->
-        <div id="login-form">
+        <form id="login-form" onsubmit="submitLogin(event)">
             <div class="login-field">
                 <label class="login-label">Username</label>
                 <input class="login-input" id="login-username" type="text" autocomplete="username" placeholder="your username">
@@ -37,11 +37,11 @@
                 <input class="login-input" id="login-password" type="password" autocomplete="current-password" placeholder="••••••••">
             </div>
             <div class="login-error" id="login-error"></div>
-            <button class="login-btn" id="login-btn" onclick="submitLogin()">Sign in</button>
-        </div>
+            <button class="login-btn" id="login-btn" type="submit">Sign in</button>
+        </form>
 
         <!-- Register form -->
-        <div id="register-form" style="display:none">
+        <form id="register-form" onsubmit="submitRegister(event)" style="display:none">
             <div class="login-field">
                 <label class="login-label">Username</label>
                 <input class="login-input" id="register-username" type="text" autocomplete="username" placeholder="choose a username">
@@ -55,8 +55,8 @@
                 <input class="login-input" id="register-confirm" type="password" autocomplete="new-password" placeholder="repeat password">
             </div>
             <div class="login-error" id="register-error"></div>
-            <button class="login-btn" id="register-btn" onclick="submitRegister()">Create account</button>
-        </div>
+            <button class="login-btn" id="register-btn" type="submit">Create account</button>
+        </form>
     </div>
 </div>
 
@@ -168,7 +168,6 @@
                 <button class="mode-tab active" onclick="setEditorMode('write')" id="mode-write">Write</button>
                 <button class="mode-tab"        onclick="setEditorMode('preview')" id="mode-preview">Preview</button>
             </div>
-
             <!-- Editor split pane -->
             <div class="editor-pane">
                 <div class="write-pane" id="write-pane">
@@ -308,8 +307,6 @@
     </div><!-- .main -->
 </div><!-- .app-shell -->
 
-</div></div><div id="toast" class="toast"></div>
-
 <!-- ── Bottom nav (mobile only) ─────────────────────────────────────────── -->
 <nav class="bottom-nav">
     <div class="bottom-nav-inner">
@@ -327,6 +324,9 @@
         </button>
     </div>
 </nav>
+
+<!-- Toast notification (referenced by toast() in utils.js) -->
+<div id="toast" class="toast"></div>
 
 
 <!-- Application scripts — order matters: utils/state first, features after -->
