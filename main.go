@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -30,7 +31,6 @@ func main() {
 
 	ctx := context.Background()
 
-	// ── Ollama ────────────────────────────────────────────────────────────────
 	ollamaClient, err := api.ClientFromEnvironment()
 	if err != nil {
 		slog.Error("failed to create Ollama client", "error", err)
@@ -38,7 +38,6 @@ func main() {
 	}
 	slog.Info("ollama client ready")
 
-	// ── Valkey ────────────────────────────────────────────────────────────────
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     ValkeyUrl,
 		Password: "",
@@ -73,7 +72,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// ── Postgres pool ─────────────────────────────────────────────────────────
 	poolCfg, err := pgxpool.ParseConfig(DBUrl)
 	if err != nil {
 		slog.Error("invalid POSTGRES_URI", "error", err)
@@ -96,7 +94,6 @@ func main() {
 	}
 	slog.Info("connected to postgres")
 
-	// ── Vector schema ─────────────────────────────────────────────────────────
 	dim, err := strconv.Atoi(EmbedDimension)
 	if err != nil || dim <= 0 {
 		slog.Error("invalid EMBEDDING_DIMENSION", "value", EmbedDimension)
@@ -107,12 +104,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	// ── Server + routes ───────────────────────────────────────────────────────
 	srv := &Server{ollama: ollamaClient, db: pool, rdb: rdb}
 	mux := http.NewServeMux()
 
+	// Serve the entire web/ directory (index.html + static/) from the embedded FS.
+	// fs.Sub strips the "web" prefix so requests for /static/css/app.css resolve
+	// correctly to web/static/css/app.css inside the binary.
+	webFS, err := fs.Sub(embedWeb, "web")
+	if err != nil {
+		slog.Error("failed to sub web FS", "error", err)
+		os.Exit(1)
+	}
+	mux.Handle("GET /static/", http.FileServerFS(webFS))
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "index.html")
+		http.ServeFileFS(w, r, webFS, "index.html")
 	})
 
 	// Health

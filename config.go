@@ -23,4 +23,7 @@ var (
 
 	//go:embed migrations/*.sql
 	embedMigrations embed.FS
+
+	//go:embed web
+	embedWeb embed.FS
 )

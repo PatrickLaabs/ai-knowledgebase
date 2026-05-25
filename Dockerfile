@@ -45,7 +45,7 @@ USER kb
 
 # Copy only what the binary needs at runtime.
 COPY --from=builder --chown=kb:kb /app/knowledge-base .
-COPY --chown=kb:kb index.html .
+COPY --chown=kb:kb /web ./web
 
 EXPOSE 8080
 
