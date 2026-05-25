@@ -22,3 +22,52 @@ Docs are coming, mainly focused on kubernetes and maybe docker-compose for local
 * **Vector Store:** Currently PSQL and Valkey
 
 ![AI-KnowledgeBase](assets/app-image.png "AI-KnowledgeBase")
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant App as Go Application
+    participant Valkey as Valkey (External)
+    participant PG as Postgres (External)
+    participant Ollama as Ollama (External)
+
+    %% -------------------------------------
+    %% FLOW 1: DOCUMENT INDEXING
+    %% -------------------------------------
+    rect rgb(230, 240, 255)
+    Note over User, Ollama: PHASE 1: Document Indexing (Ingestion)
+    
+    User->>App: Add/Upload new Markdown Note
+    
+    App->>Ollama: Send note text (Embedding request)
+    Ollama-->>App: Return vector representation
+    
+    App->>PG: Store raw text + vector embedding
+    App->>Valkey: Update cache with new metadata/indexing state
+    
+    App-->>User: "Note saved and indexed"
+    end
+
+    %% -------------------------------------
+    %% FLOW 2: AI CHAT / SEARCH
+    %% -------------------------------------
+    rect rgb(235, 255, 235)
+    Note over User, Ollama: PHASE 2: Chat & Search (Retrieval-Augmented Generation)
+    
+    User->>App: Ask a question
+    
+    App->>Valkey: Check cache for recent identical queries
+    App->>Ollama: Send question text (Embedding request)
+    Ollama-->>App: Return query vector
+    
+    App->>PG: Perform similarity search (pgvector)
+    PG-->>App: Return top relevant notes/context
+    
+    App->>Ollama: Send System Prompt + Relevant Notes + User Question (Chat request)
+    Ollama-->>App: Stream LLM answer
+    
+    App-->>User: Display context-aware answer
+    end
+
+```
