@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Knowledge Base</title>
 
     <!-- External CDN dependencies -->
@@ -14,6 +14,51 @@
     <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
+
+<!-- ── Login overlay ─────────────────────────────────────────────────────── -->
+<div class="login-overlay" id="login-overlay">
+    <div class="login-card">
+        <div class="login-brand">KB<span>/base</span></div>
+        <div class="login-subtitle">Your personal knowledge base</div>
+
+        <div class="login-tabs">
+            <button class="login-tab active" data-tab="login"    onclick="switchAuthTab('login')">Sign in</button>
+            <button class="login-tab"        data-tab="register" onclick="switchAuthTab('register')" id="login-tab-register">Create account</button>
+        </div>
+
+        <!-- Login form -->
+        <div id="login-form">
+            <div class="login-field">
+                <label class="login-label">Username</label>
+                <input class="login-input" id="login-username" type="text" autocomplete="username" placeholder="your username">
+            </div>
+            <div class="login-field">
+                <label class="login-label">Password</label>
+                <input class="login-input" id="login-password" type="password" autocomplete="current-password" placeholder="••••••••">
+            </div>
+            <div class="login-error" id="login-error"></div>
+            <button class="login-btn" id="login-btn" onclick="submitLogin()">Sign in</button>
+        </div>
+
+        <!-- Register form -->
+        <div id="register-form" style="display:none">
+            <div class="login-field">
+                <label class="login-label">Username</label>
+                <input class="login-input" id="register-username" type="text" autocomplete="username" placeholder="choose a username">
+            </div>
+            <div class="login-field">
+                <label class="login-label">Password</label>
+                <input class="login-input" id="register-password" type="password" autocomplete="new-password" placeholder="at least 8 characters">
+            </div>
+            <div class="login-field">
+                <label class="login-label">Confirm password</label>
+                <input class="login-input" id="register-confirm" type="password" autocomplete="new-password" placeholder="repeat password">
+            </div>
+            <div class="login-error" id="register-error"></div>
+            <button class="login-btn" id="register-btn" onclick="submitRegister()">Create account</button>
+        </div>
+    </div>
+</div>
 
 <!-- ── Topbar ────────────────────────────────────────────────────────────── -->
 <div class="topbar">
@@ -30,6 +75,10 @@
         </div>
         <div class="status-dot" id="status-dot"></div>
         <span class="status-label" id="status-label">connecting…</span>
+        <div class="topbar-user-wrap" id="topbar-user-wrap" style="display:none">
+            <span class="topbar-username" id="topbar-user"></span>
+            <button class="btn-logout" onclick="logout()" title="Sign out">↩</button>
+        </div>
     </div>
 </div>
 
@@ -285,6 +334,7 @@
 <script src="/static/js/utils.js"></script>
 <script src="/static/js/state.js"></script>
 <script src="/static/js/health.js"></script>
+<script src="/static/js/auth.js"></script>
 <script src="/static/js/notes.js"></script>
 <script src="/static/js/editor.js"></script>
 <script src="/static/js/chat.js"></script>

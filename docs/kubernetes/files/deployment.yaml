@@ -22,6 +22,8 @@ spec:
           ports:
             - containerPort: 8080
           env:
+            - name: ALLOW_REGISTRATION
+              value: "false"
             - name: LLM_MODEL
               value: "granite4.1:3b"
             - name: EMBED_MODEL

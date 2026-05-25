@@ -1,6 +1,9 @@
 /* ── Reset ─────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-button { touch-action: manipulation; } /* prevent double-tap zoom on mobile */
+/* Prevent double-tap zoom; remove grey flash on tap (iOS Safari) */
+button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+/* iOS Safari: make div/span click targets actually tappable */
+[onclick] { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 
 /* ── Design tokens ─────────────────────────────────────────────────────── */
 :root {
@@ -25,6 +28,9 @@ button { touch-action: manipulation; } /* prevent double-tap zoom on mobile */
 }
 
 html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; }
+/* iOS Safari 100vh includes the browser chrome; use dvh (dynamic viewport height)
+   with a 100% fallback so content never hides under the address bar or home indicator */
+body { height: 100dvh; }
 
 /* ── Topbar ─────────────────────────────────────────────────────────────── */
 .topbar {
@@ -72,8 +78,13 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     background: rgba(0,0,0,0.6);
     z-index: 150;
     opacity: 0; transition: opacity 0.25s;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
 }
-.sidebar-backdrop.visible { opacity: 1; }
+.sidebar-backdrop.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
 
 /* ── Sidebar ────────────────────────────────────────────────────────────── */
 /* Sidebar Parent Structure */
@@ -255,23 +266,27 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .mode-tab.active { border-color: var(--accent-dim); color: var(--accent); background: rgba(232,160,32,0.07); }
 
 /* ── Editor pane ────────────────────────────────────────────────────────── */
-.editor-pane {
+.editor-pane { flex-direction: column; height: 100%; }
+
+.write-pane {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
     flex: 1;
     display: flex;
-    overflow: hidden;
+    flex-direction: column;
+    height: 100%;
 }
-/* Write side */
-.write-pane {
-    flex: 1; display: flex; flex-direction: column;
-    border-right: 1px solid var(--border);
-    min-width: 0;
-}
+
+/* Strict layout removal when hidden */
+.write-pane.hidden   { display: none !important; }
+.preview-pane.hidden { display: none !important; }
+
+/* Force the textarea to fully expand and inherit touch scrolling */
 .note-textarea {
-    flex: 1; padding: 20px;
-    background: var(--bg); border: none; outline: none;
-    font-family: var(--mono); font-size: 14px; line-height: 1.75;
-    color: var(--text); resize: none;
-    -webkit-overflow-scrolling: touch;
+    flex: 1;
+    height: 100%;
+    min-height: 200px;
+    overflow-y: auto;
 }
 .note-textarea::placeholder { color: var(--text-dim); font-style: italic; }
 
@@ -477,8 +492,10 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     position: fixed; bottom: 0; left: 0; right: 0;
     height: var(--bottomnav-h);
     background: var(--surface); border-top: 1px solid var(--border);
-    z-index: 100;
-    padding-bottom: env(safe-area-inset-bottom);
+    /* Must be above sidebar backdrop (150) but below login overlay (2000) */
+    z-index: 170;
+    /* env() with fallback: safe-area-inset-bottom is non-zero on iPhone X+ */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .bottom-nav-inner { display: flex; height: 100%; }
 .bottom-tab {
@@ -547,8 +564,8 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     /* Bottom nav visible */
     .bottom-nav { display: block; }
 
-    /* Push content above bottom nav */
-    .app-shell { padding-bottom: var(--bottomnav-h); }
+    /* Push content above bottom nav + iPhone home indicator */
+    .app-shell { padding-bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px)); }
 
     /* Toast above bottom nav */
     .toast { bottom: calc(var(--bottomnav-h) + 8px); }
@@ -559,3 +576,161 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     /* Chat inner — tighter padding */
     .chat-inner { padding: 0 12px 12px; }
 }
+
+
+/* ── Admin view ──────────────────────────────────────────────────────────────── */
+.admin-inner {
+    flex: 1; overflow-y: auto; padding: 28px 32px;
+    display: flex; flex-direction: column; gap: 16px; max-width: 760px;
+}
+.admin-header { margin-bottom: 4px; }
+.admin-title { font-size: 15px; font-weight: 500; color: var(--text); letter-spacing: 0.04em; }
+.admin-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+
+.admin-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px 24px;
+    display: flex; flex-direction: column; gap: 16px;
+}
+.admin-card-info { gap: 12px; }
+.admin-card-header { display: flex; align-items: flex-start; gap: 16px; }
+.admin-card-header > div { flex: 1; }
+.admin-card-title { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 6px; }
+.admin-card-desc { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+.admin-card-desc code, .admin-info-list code {
+    font-family: var(--mono); color: var(--accent); font-size: 11px;
+    background: rgba(232,160,32,0.08); padding: 1px 5px; border-radius: 2px;
+}
+
+.reindex-progress-wrap { display: flex; flex-direction: column; gap: 6px; }
+.reindex-progress-bar {
+    height: 4px; background: var(--surface-2); border-radius: 2px; overflow: hidden;
+}
+.reindex-progress-fill {
+    height: 100%; width: 0%; background: var(--accent);
+    border-radius: 2px; transition: width 0.4s ease;
+}
+.reindex-progress-fill.indeterminate {
+    width: 30%; animation: indeterminate 1.4s ease-in-out infinite;
+}
+@keyframes indeterminate {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+}
+.reindex-progress-label { font-size: 11px; color: var(--text-muted); }
+
+.admin-stats {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    padding-top: 4px; border-top: 1px solid var(--border);
+}
+.admin-stat { display: flex; flex-direction: column; gap: 3px; }
+.admin-stat-val { font-size: 16px; font-weight: 500; color: var(--text); }
+.admin-stat-key { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); }
+
+.admin-info-list {
+    font-size: 12px; color: var(--text-muted); line-height: 1.7;
+    padding-left: 16px; margin: 0;
+}
+.admin-info-list li { margin: 2px 0; }
+.admin-warning {
+    font-size: 11px; color: var(--text-muted); background: rgba(232,160,32,0.06);
+    border: 1px solid var(--accent-dim); border-radius: var(--radius);
+    padding: 8px 12px; line-height: 1.6;
+}
+.admin-error {
+    font-size: 12px; color: var(--danger); background: rgba(192,57,43,0.08);
+    border: 1px solid rgba(192,57,43,0.3); border-radius: var(--radius);
+    padding: 8px 12px;
+}
+
+.reindex-badge {
+    font-size: 11px; color: var(--accent); background: rgba(232,160,32,0.1);
+    border: 1px solid var(--accent-dim); border-radius: var(--radius);
+    padding: 2px 8px; cursor: pointer; display: flex; align-items: center; gap: 5px;
+    transition: background 0.15s;
+}
+.reindex-badge:hover { background: rgba(232,160,32,0.18); }
+.reindex-spinner { animation: spin 1.2s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 640px) {
+    .admin-inner { padding: 16px; }
+    .admin-stats { grid-template-columns: repeat(2, 1fr); }
+    .admin-card-header { flex-direction: column; }
+}
+
+/* ── Login overlay ──────────────────────────────────────────────────────────── */
+.login-overlay {
+    position: fixed; inset: 0; z-index: 2000;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+}
+.login-overlay.hidden { display: none; }
+
+.login-card {
+    width: 100%; max-width: 380px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: calc(var(--radius) * 2); padding: 36px 32px;
+    display: flex; flex-direction: column; gap: 20px;
+}
+
+.login-brand {
+    font-family: var(--mono); font-size: 22px; font-weight: 700;
+    color: var(--text); letter-spacing: -0.5px; text-align: center;
+}
+.login-brand span { color: var(--accent); }
+.login-subtitle { font-size: 12px; color: var(--text-muted); text-align: center; margin-top: -12px; }
+
+.login-tabs {
+    display: flex; border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+}
+.login-tab {
+    flex: 1; background: none; border: none; padding: 8px 12px;
+    font-size: 12px; color: var(--text-muted); cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.login-tab.active { background: var(--surface-2); color: var(--text); }
+.login-tab:hover:not(.active) { background: var(--surface-hover); }
+
+.login-field { display: flex; flex-direction: column; gap: 6px; }
+.login-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.05em; }
+.login-input {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 9px 12px;
+    color: var(--text); font-size: 13px; outline: none;
+    transition: border-color 0.15s;
+}
+.login-input:focus { border-color: var(--accent); }
+
+.login-error {
+    font-size: 12px; color: var(--danger); min-height: 16px;
+    text-align: center;
+}
+
+.login-btn {
+    width: 100%; padding: 10px; background: var(--accent);
+    border: none; border-radius: var(--radius); color: #000;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: opacity 0.15s;
+}
+.login-btn:hover { opacity: 0.88; }
+.login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Topbar user display ─────────────────────────────────────────────────────── */
+.topbar-user-wrap {
+    display: flex; align-items: center; gap: 8px;
+    border-left: 1px solid var(--border); padding-left: 12px; margin-left: 4px;
+}
+.topbar-username {
+    font-size: 12px; color: var(--text-muted);
+    font-family: var(--mono);
+}
+.btn-logout {
+    background: none; border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 2px 8px;
+    color: var(--text-muted); font-size: 12px; cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+.btn-logout:hover { color: var(--text); border-color: var(--text-muted); }

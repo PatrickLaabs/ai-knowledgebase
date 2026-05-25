@@ -27,22 +27,20 @@ func main() {
 		"llm_model", LLMModel,
 		"embed_model", EmbedModel,
 		"embed_dimension", EmbedDimension,
+		"allow_registration", AllowRegistration,
 	)
 
 	ctx := context.Background()
 
+	// ── Ollama ────────────────────────────────────────────────────────────────
 	ollamaClient, err := api.ClientFromEnvironment()
 	if err != nil {
 		slog.Error("failed to create Ollama client", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("ollama client ready")
 
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     ValkeyUrl,
-		Password: "",
-		DB:       0,
-	})
+	// ── Valkey ────────────────────────────────────────────────────────────────
+	rdb := redis.NewClient(&redis.Options{Addr: ValkeyUrl})
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		slog.Error("failed to connect to valkey", "error", err)
 		os.Exit(1)
@@ -50,34 +48,26 @@ func main() {
 	slog.Info("connected to valkey")
 
 	// ── Goose migrations ──────────────────────────────────────────────────────
-	// Goose requires a standard *sql.DB; we open a separate short-lived
-	// connection just for migrations, then close it before creating the pool.
 	migrationDB, err := goose.OpenDBWithDriver("pgx", DBUrl)
 	if err != nil {
-		slog.Error("failed to open migration db connection", "error", err)
+		slog.Error("failed to open migration db", "error", err)
 		os.Exit(1)
 	}
-	if err := goose.SetDialect("postgres"); err != nil {
-		slog.Error("failed to set migration dialect", "error", err)
-		os.Exit(1)
-	}
+	goose.SetDialect("postgres")
 	goose.SetBaseFS(embedMigrations)
-	slog.Info("checking database migration state…")
+	slog.Info("running migrations…")
 	if err := goose.Up(migrationDB, "migrations"); err != nil {
 		slog.Error("migration failed", "error", err)
 		os.Exit(1)
 	}
-	if err := migrationDB.Close(); err != nil {
-		slog.Error("failed to close migration db", "error", err)
-		os.Exit(1)
-	}
+	migrationDB.Close()
 
+	// ── Postgres pool ─────────────────────────────────────────────────────────
 	poolCfg, err := pgxpool.ParseConfig(DBUrl)
 	if err != nil {
 		slog.Error("invalid POSTGRES_URI", "error", err)
 		os.Exit(1)
 	}
-	// Register pgvector types on every new connection in the pool.
 	poolCfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		return pgxvector.RegisterTypes(ctx, conn)
 	}
@@ -87,13 +77,9 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
-
-	if err := pool.Ping(ctx); err != nil {
-		slog.Error("failed to reach postgres", "error", err)
-		os.Exit(1)
-	}
 	slog.Info("connected to postgres")
 
+	// ── Vector schema ─────────────────────────────────────────────────────────
 	dim, err := strconv.Atoi(EmbedDimension)
 	if err != nil || dim <= 0 {
 		slog.Error("invalid EMBEDDING_DIMENSION", "value", EmbedDimension)
@@ -104,40 +90,44 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := &Server{ollama: ollamaClient, db: pool, rdb: rdb}
-	mux := http.NewServeMux()
-
-	// Serve the entire web/ directory (index.html + static/) from the embedded FS.
-	// fs.Sub strips the "web" prefix so requests for /static/css/app.css resolve
-	// correctly to web/static/css/app.css inside the binary.
+	// ── Static assets ─────────────────────────────────────────────────────────
 	webFS, err := fs.Sub(embedWeb, "web")
 	if err != nil {
 		slog.Error("failed to sub web FS", "error", err)
 		os.Exit(1)
 	}
+
+	// ── Server ────────────────────────────────────────────────────────────────
+	srv := &Server{ollama: ollamaClient, db: pool, rdb: rdb}
+	mux := http.NewServeMux()
+
+	// Helper to wrap a handler with requireAuth cleanly.
+	auth := func(h http.HandlerFunc) http.Handler { return srv.requireAuth(h) }
+
+	// Static files + SPA shell
 	mux.Handle("GET /static/", http.FileServerFS(webFS))
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, webFS, "index.html")
 	})
 
-	// Health
+	// Public — no auth required
 	mux.HandleFunc("GET /api/health", srv.handleHealth)
+	mux.HandleFunc("GET /api/auth/me", srv.handleMe)
+	mux.HandleFunc("POST /api/auth/login", srv.handleLogin)
+	mux.HandleFunc("POST /api/auth/logout", srv.handleLogout)
+	mux.HandleFunc("POST /api/auth/register", srv.handleRegister)
 
-	// Notes
-	mux.HandleFunc("GET /api/notes", srv.handleListNotes)
-	mux.HandleFunc("POST /api/notes", srv.handleCreateNote)
-	mux.HandleFunc("PUT /api/notes/{id}", srv.handleUpdateNote)
-	mux.HandleFunc("DELETE /api/notes/{id}", srv.handleDeleteNote)
-	mux.HandleFunc("GET /api/tags", srv.handleListTags)
+	// Protected — valid session required
+	mux.Handle("GET /api/notes", auth(srv.handleListNotes))
+	mux.Handle("POST /api/notes", auth(srv.handleCreateNote))
+	mux.Handle("PUT /api/notes/{id}", auth(srv.handleUpdateNote))
+	mux.Handle("DELETE /api/notes/{id}", auth(srv.handleDeleteNote))
+	mux.Handle("GET /api/tags", auth(srv.handleListTags))
+	mux.Handle("POST /api/chat", auth(srv.handleChat))
+	mux.Handle("POST /api/admin/reindex", auth(srv.handleStartReindex))
+	mux.Handle("GET /api/admin/reindex/status", auth(srv.handleReindexStatus))
 
-	// Chat
-	mux.HandleFunc("POST /api/chat", srv.handleChat)
-
-	// Admin
-	mux.HandleFunc("POST /api/admin/reindex", srv.handleStartReindex)
-	mux.HandleFunc("GET /api/admin/reindex/status", srv.handleReindexStatus)
-
-	slog.Info("routes registered, server ready", "addr", ListenAddr)
+	slog.Info("server ready", "addr", ListenAddr)
 	if err := http.ListenAndServe(ListenAddr, loggingMiddleware(mux)); err != nil {
 		slog.Error("server exited", "error", err)
 		os.Exit(1)

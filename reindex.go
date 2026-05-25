@@ -3,21 +3,22 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"sync/atomic"
+	"sync"
 	"time"
 
-	"github.com/pgvector/pgvector-go"
+	pgvector "github.com/pgvector/pgvector-go"
 	"github.com/redis/go-redis/v9"
 )
 
-const reindexJobKey = "reindex:job"
+// reindexJobs guards against concurrent jobs per user.
+// Only one reindex can run per user at a time.
+var reindexJobs sync.Map // map[int]bool (userID -> running)
 
-// ReindexStatus is persisted in Valkey so the UI can poll progress even after
-// navigating away and back. TTL is 24h so stale jobs auto-clean themselves.
+// ReindexStatus is persisted in Valkey (24h TTL) so the UI stays accurate
+// even after navigating away and back.
 type ReindexStatus struct {
 	Status     string `json:"status"` // idle | running | done | error
 	Total      int    `json:"total"`
@@ -28,13 +29,13 @@ type ReindexStatus struct {
 	Error      string `json:"error,omitempty"`
 }
 
-// reindexRunning guards against concurrent jobs. CompareAndSwap ensures only
-// one goroutine can start a job even under concurrent POST /api/admin/reindex.
-var reindexRunning atomic.Bool
+func reindexJobKey(userID int) string {
+	return fmt.Sprintf("reindex:job:%d", userID)
+}
 
-func (s *Server) getReindexStatus(ctx context.Context) (ReindexStatus, error) {
-	val, err := s.rdb.Get(ctx, reindexJobKey).Result()
-	if errors.Is(err, redis.Nil) {
+func (s *Server) getReindexStatus(ctx context.Context, userID int) (ReindexStatus, error) {
+	val, err := s.rdb.Get(ctx, reindexJobKey(userID)).Result()
+	if err == redis.Nil {
 		return ReindexStatus{Status: "idle"}, nil
 	}
 	if err != nil {
@@ -42,28 +43,27 @@ func (s *Server) getReindexStatus(ctx context.Context) (ReindexStatus, error) {
 	}
 	var st ReindexStatus
 	if err := json.Unmarshal([]byte(val), &st); err != nil {
-		return ReindexStatus{}, fmt.Errorf("unmarshal status: %w", err)
+		return ReindexStatus{}, err
 	}
 	return st, nil
 }
 
-func (s *Server) saveReindexStatus(ctx context.Context, st ReindexStatus) {
+func (s *Server) saveReindexStatus(ctx context.Context, userID int, st ReindexStatus) {
 	data, _ := json.Marshal(st)
-	if err := s.rdb.Set(ctx, reindexJobKey, data, 24*time.Hour).Err(); err != nil {
-		slog.Warn("reindex: failed to persist status to valkey", "error", err)
+	if err := s.rdb.Set(ctx, reindexJobKey(userID), data, 24*time.Hour).Err(); err != nil {
+		slog.Warn("reindex: failed to persist status", "user_id", userID, "error", err)
 	}
 }
 
 // POST /api/admin/reindex
-// Kicks off a background re-embedding job. Returns 409 if already running.
 func (s *Server) handleStartReindex(w http.ResponseWriter, r *http.Request) {
-	if !reindexRunning.CompareAndSwap(false, true) {
+	user := userFromContext(r.Context())
+
+	// Atomic per-user lock using sync.Map.
+	if _, loaded := reindexJobs.LoadOrStore(user.UserID, true); loaded {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
-		err := json.NewEncoder(w).Encode(map[string]string{"error": "reindex already running"})
-		if err != nil {
-			return
-		}
+		json.NewEncoder(w).Encode(map[string]string{"error": "reindex already running"})
 		return
 	}
 
@@ -71,62 +71,57 @@ func (s *Server) handleStartReindex(w http.ResponseWriter, r *http.Request) {
 		Status:    "running",
 		StartedAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	s.saveReindexStatus(r.Context(), st)
-	slog.Info("reindex: job accepted, launching background worker")
+	s.saveReindexStatus(r.Context(), user.UserID, st)
+	slog.Info("reindex: job accepted", "user", user.Username)
 
-	go s.runReindex(st)
+	go s.runReindex(user.UserID, user.Username, st)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
-	err := json.NewEncoder(w).Encode(st)
-	if err != nil {
-		return
-	}
+	json.NewEncoder(w).Encode(st)
 }
 
 // GET /api/admin/reindex/status
-// Returns current job state from Valkey. Safe to poll every 2s from the UI.
 func (s *Server) handleReindexStatus(w http.ResponseWriter, r *http.Request) {
-	st, err := s.getReindexStatus(r.Context())
+	user := userFromContext(r.Context())
+	st, err := s.getReindexStatus(r.Context(), user.UserID)
 	if err != nil {
-		slog.Error("reindex: status read failed", "error", err)
 		http.Error(w, "failed to get status", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(st)
-	if err != nil {
-		return
-	}
+	json.NewEncoder(w).Encode(st)
 }
 
-// runReindex is the background worker. It embeds every note sequentially and
-// writes granular progress to Valkey after each note so the UI stays live.
-func (s *Server) runReindex(st ReindexStatus) {
-	defer reindexRunning.Store(false)
+// runReindex re-embeds all notes belonging to userID and writes progress to
+// Valkey after every note so the UI stays live during long jobs.
+func (s *Server) runReindex(userID int, username string, st ReindexStatus) {
+	defer reindexJobs.Delete(userID)
 	ctx := context.Background()
 
-	// ── 1. Count total so the UI can show a progress bar immediately ──────────
-	if err := s.db.QueryRow(ctx, `SELECT COUNT(*) FROM notes`).Scan(&st.Total); err != nil {
-		slog.Error("reindex: count query failed", "error", err)
+	// Count scoped to this user.
+	if err := s.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notes WHERE user_id = $1`, userID,
+	).Scan(&st.Total); err != nil {
+		slog.Error("reindex: count failed", "user", username, "error", err)
 		st.Status = "error"
 		st.Error = err.Error()
 		st.FinishedAt = time.Now().UTC().Format(time.RFC3339)
-		s.saveReindexStatus(ctx, st)
+		s.saveReindexStatus(ctx, userID, st)
 		return
 	}
-	s.saveReindexStatus(ctx, st)
-	slog.Info("reindex: worker started", "total_notes", st.Total)
+	s.saveReindexStatus(ctx, userID, st)
+	slog.Info("reindex: worker started", "user", username, "total", st.Total)
 
-	// ── 2. Load all note IDs + content up front (avoids holding a cursor open
-	//       for the entire embedding duration, which can be many minutes) ──────
-	rows, err := s.db.Query(ctx, `SELECT id, content FROM notes ORDER BY id`)
+	// Load all note IDs up front to avoid holding a cursor open during embedding.
+	rows, err := s.db.Query(ctx,
+		`SELECT id, content FROM notes WHERE user_id = $1 ORDER BY id`, userID,
+	)
 	if err != nil {
-		slog.Error("reindex: notes fetch failed", "error", err)
 		st.Status = "error"
 		st.Error = err.Error()
 		st.FinishedAt = time.Now().UTC().Format(time.RFC3339)
-		s.saveReindexStatus(ctx, st)
+		s.saveReindexStatus(ctx, userID, st)
 		return
 	}
 
@@ -137,59 +132,40 @@ func (s *Server) runReindex(st ReindexStatus) {
 	var notes []noteRow
 	for rows.Next() {
 		var n noteRow
-		if err := rows.Scan(&n.ID, &n.Content); err == nil {
+		if rows.Scan(&n.ID, &n.Content) == nil {
 			notes = append(notes, n)
 		}
 	}
 	rows.Close()
 
-	// ── 3. Embed each note, updating Valkey after every one ───────────────────
 	for _, n := range notes {
 		emb, err := s.embedText(ctx, n.Content)
 		if err != nil {
-			slog.Warn("reindex: embed failed",
-				"note_id", n.ID,
-				"error", err,
-				"completed", st.Completed,
-				"failed", st.Failed+1,
-				"total", st.Total,
-			)
+			slog.Warn("reindex: embed failed", "note_id", n.ID, "user", username, "error", err)
+			st.Failed++
+		} else if _, err = s.db.Exec(ctx,
+			`UPDATE notes SET embedding=$1, updated_at=NOW() WHERE id=$2 AND user_id=$3`,
+			pgvector.NewVector(emb), n.ID, userID,
+		); err != nil {
+			slog.Warn("reindex: db update failed", "note_id", n.ID, "error", err)
 			st.Failed++
 		} else {
-			if _, err = s.db.Exec(ctx,
-				`UPDATE notes SET embedding = $1, updated_at = NOW() WHERE id = $2`,
-				pgvector.NewVector(emb), n.ID,
-			); err != nil {
-				slog.Warn("reindex: db update failed",
-					"note_id", n.ID,
-					"error", err,
-				)
-				st.Failed++
-			} else {
-				st.Completed++
-				pct := float64(st.Completed+st.Failed) / float64(st.Total) * 100
-				slog.Info("reindex: note embedded",
-					"note_id", n.ID,
-					"completed", st.Completed,
-					"failed", st.Failed,
-					"total", st.Total,
-					"progress", fmt.Sprintf("%.1f%%", pct),
-				)
-			}
+			st.Completed++
 		}
 
-		// Persist after every note — UI polls this every 2s
-		s.saveReindexStatus(ctx, st)
+		pct := float64(st.Completed+st.Failed) / float64(st.Total) * 100
+		slog.Info("reindex: progress",
+			"user", username,
+			"completed", st.Completed,
+			"failed", st.Failed,
+			"total", st.Total,
+			"progress", fmt.Sprintf("%.1f%%", pct),
+		)
+		s.saveReindexStatus(ctx, userID, st)
 	}
 
-	// ── 4. Mark complete ──────────────────────────────────────────────────────
 	st.Status = "done"
 	st.FinishedAt = time.Now().UTC().Format(time.RFC3339)
-	s.saveReindexStatus(ctx, st)
-
-	slog.Info("reindex: complete",
-		"completed", st.Completed,
-		"failed", st.Failed,
-		"total", st.Total,
-	)
+	s.saveReindexStatus(ctx, userID, st)
+	slog.Info("reindex: complete", "user", username, "completed", st.Completed, "failed", st.Failed)
 }
