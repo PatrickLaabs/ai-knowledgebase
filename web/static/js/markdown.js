@@ -1,5 +1,4 @@
 // markdown.js — marked + highlight.js configuration
-// ── Markdown setup ────────────────────────────────────────────────────────────
 marked.setOptions({ breaks: true, gfm: true });
 
 // Wire highlight.js into marked for fenced code blocks.
