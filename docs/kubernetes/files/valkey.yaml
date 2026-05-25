@@ -1,0 +1,47 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valkey
+  labels:
+    app: valkey
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: valkey
+  template:
+    metadata:
+      labels:
+        app: valkey
+        version: v1
+    spec:
+      containers:
+        - name: valkey
+          image: docker.io/valkey/valkey:9.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+          - containerPort: 6379
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: valkey
+  labels:
+    verion: v1
+spec:
+  selector:
+    app: valkey
+    version: v1
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379

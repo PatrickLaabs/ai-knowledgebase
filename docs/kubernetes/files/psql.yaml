@@ -1,0 +1,30 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: ai-postgres
+  labels:
+    app.kubernetes.io/component: ai-postgres
+spec:
+  instances: 3
+  monitoring:
+    enablePodMonitor: true
+  description: "ai-postgres"
+
+  primaryUpdateStrategy: unsupervised
+  enableSuperuserAccess: true
+
+  bootstrap:
+    initdb:
+      database: ai-postgres
+      owner: ai
+      postInitSQL:
+        - "GRANT ALL ON SCHEMA public TO ai;"
+        - "CREATE EXTENSION IF NOT EXISTS vector SCHEMA public;"
+
+  storage:
+    storageClass: longhorn
+    size: 5Gi
+  walStorage:
+    storageClass: longhorn
+    size: 5Gi

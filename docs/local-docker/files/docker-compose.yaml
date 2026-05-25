@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-knowledgebase-app
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://ai:ai_secure_password@postgres:5432/ai-postgres?sslmode=disable
+      - VALKEY_HOST=valkey
+      - VALKEY_PORT=6379
+      - OLLAMA_HOST=http://ollama:11434
+      - LLM_MODEL=llama3
+      - EMBEDDING_MODEL=nomic-embed-text
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ai-knowledgebase-db
+    environment:
+      - POSTGRES_USER=ai
+      - POSTGRES_PASSWORD=ai_secure_password
+      - POSTGRES_DB=ai-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-extensions.sql:/docker-entrypoint-initdb.d/init-extensions.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai -d ai-postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  valkey:
+    image: valkey/valkey:8.0-alpine
+    container_name: ai-knowledgebase-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkeydata:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai-knowledgebase-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  ollama-bootstrap:
+    image: curlimages/curl:latest
+    container_name: ai-knowledgebase-bootstrap
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: [ "/bin/sh", "-c" ]
+    command:
+      - |
+        echo "Pulling Chat LLM Model..."
+        curl -s -X POST http://ollama:11434/api/pull -d '{"name": "llama3"}'
+        echo "\nPulling Embedding Model..."
+        curl -s -X POST http://ollama:11434/api/pull -d '{"name": "nomic-embed-text"}'
+        echo "\nModels successfully bootstrapped!"
+
+volumes:
+  pgdata:
+  valkeydata:
+  ollama_storage:

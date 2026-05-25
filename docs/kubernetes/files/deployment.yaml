@@ -1,0 +1,52 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: knowledge-base
+  labels:
+    app: knowledge-base
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: knowledge-base
+  template:
+    metadata:
+      labels:
+        app: knowledge-base
+    spec:
+      containers:
+        - name: knowledge-base
+          image: ghcr.io/patricklaabs/ai-knowledgebase:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: LLM_MODEL
+              value: "granite4.1:3b"
+            - name: EMBED_MODEL
+              value: "snowflake-arctic-embed2:568m"
+            - name: EMBEDDING_DIMENSION
+              value: "1024"
+            - name: OLLAMA_HOST
+              value: "http://ollama.ollama.svc.cluster.local:11434"
+            - name: POSTGRES_URI
+              valueFrom:
+                secretKeyRef:
+                  name: ai-postgres-app
+                  key: fqdn-uri
+            - name: VALKEY_URI
+              value: "valkey.paddy-knowledge.svc.cluster.local:6379"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: knowledge-base-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: knowledge-base
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
