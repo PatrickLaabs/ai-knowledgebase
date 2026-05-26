@@ -1,108 +1,180 @@
-// chat.js — SSE chat handler, message rendering, session management
-    // ── Chat ──────────────────────────────────────────────────────────────────────
-    async function sendChat() {
-        if (state.isStreaming) return;
-        const input = document.getElementById('chat-input');
-        const query = input.value.trim();
-        if (!query) return;
+/**
+ * chat.js — minimal SSE streaming client for /api/chat
+ *
+ * This is the only JavaScript in the new htmx-based frontend.
+ * It handles the one thing htmx can't do cleanly: streaming JSON chunks
+ * from an SSE response and appending them to the DOM as they arrive.
+ */
+(function () {
+  'use strict';
 
-        input.value = '';
-        autoResize(input);
-        state.isStreaming = true;
-        document.getElementById('chat-send').disabled = true;
+  const messagesDiv = document.getElementById('chat-messages');
+  const sourcesDiv  = document.getElementById('chat-sources');
+  const chatInput   = document.getElementById('chat-input');
+  const sendBtn     = document.getElementById('chat-send');
 
-        const msgs = document.getElementById('messages');
-        msgs.querySelector('.empty-state')?.remove();
+  if (!messagesDiv || !chatInput || !sendBtn) return; // not on app page
 
-        appendMessage('user', query);
-        const assistantEl = appendMessage('assistant', '');
-        const bubble = assistantEl.querySelector('.msg-bubble');
-        bubble.classList.add('streaming');
+  let isStreaming = false;
 
-        let accumulated = '';
+  // ── Helpers ─────────────────────────────────────────────────────────────
 
-        try {
-            const resp = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query }),
-            });
-            if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
 
-            const reader  = resp.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
+  function scrollToBottom() {
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  }
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-                const parts = buffer.split('\n\n');
-                buffer = parts.pop() ?? '';
+  function setStreaming(active) {
+    isStreaming        = active;
+    sendBtn.disabled   = active;
+    chatInput.disabled = active;
+    sendBtn.textContent = active ? '…' : 'Send';
+  }
 
-                for (const part of parts) {
-                    if (!part.startsWith('data: ')) continue;
-                    let data;
-                    try { data = JSON.parse(part.slice(6)); } catch { continue; }
+  /** Appends a chat bubble and returns the inner text node element. */
+  function appendBubble(role) {
+    const wrapper = document.createElement('div');
+    wrapper.className = role === 'user'
+      ? 'flex justify-end'
+      : 'flex justify-start';
 
-                    if (data.sources !== undefined) {
-                        renderSources(assistantEl, data.sources);
-                        continue;
-                    }
-                    if (data.error) {
-                        accumulated += `\n\n⚠ ${data.error}`;
-                    }
-                    if (data.chunk !== undefined) {
-                        accumulated += data.chunk;
-                        // Re-render markdown on each token — marked is fast enough.
-                        bubble.innerHTML = `<div class="md-preview">${renderMarkdown(accumulated)}</div>`;
-                        msgs.scrollTop = msgs.scrollHeight;
-                    }
-                }
+    const bubble = document.createElement('div');
+    bubble.className = role === 'user'
+      ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-[75%] text-sm'
+      : 'bg-gray-800 text-gray-100 rounded-2xl rounded-tl-sm px-4 py-2.5 max-w-[75%] text-sm whitespace-pre-wrap';
+
+    wrapper.appendChild(bubble);
+    messagesDiv.appendChild(wrapper);
+    scrollToBottom();
+    return bubble;
+  }
+
+  // ── Source citations ─────────────────────────────────────────────────────
+
+  function renderSources(sources) {
+    if (!sources || !sources.length) {
+      sourcesDiv.classList.add('hidden');
+      return;
+    }
+    sourcesDiv.classList.remove('hidden');
+    sourcesDiv.innerHTML =
+      '<span class="font-medium text-gray-500 mr-2">Sources:</span>' +
+      sources.map(function (s) {
+        const preview = escapeHtml((s.content || '').slice(0, 50)) + '…';
+        return '<span class="inline-block bg-gray-800 text-indigo-400 border border-gray-700 ' +
+               'rounded px-2 py-0.5 mr-1 mb-1">' + preview + '</span>';
+      }).join('');
+  }
+
+  // ── Main send ────────────────────────────────────────────────────────────
+
+  function sendMessage() {
+    const query = chatInput.value.trim();
+    if (!query || isStreaming) return;
+
+    // Clear welcome message on first send
+    const welcome = messagesDiv.querySelector('p');
+    if (welcome) welcome.remove();
+
+    chatInput.value = '';
+
+    // Auto-grow textarea back to 1 row
+    chatInput.rows = 1;
+
+    appendBubble('user').textContent = query;
+
+    const assistantBubble = appendBubble('assistant');
+    assistantBubble.textContent = '';
+    let assistantText = '';
+
+    setStreaming(true);
+    sourcesDiv.classList.add('hidden');
+    sourcesDiv.innerHTML = '';
+
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: query, session_id: 'default' }),
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const reader  = res.body.getReader();
+        const decoder = new TextDecoder();
+        let   buffer  = '';
+
+        function pump() {
+          return reader.read().then(function (chunk) {
+            if (chunk.done) {
+              setStreaming(false);
+              return;
             }
-        } catch(err) {
-            bubble.innerHTML = `<div class="md-preview">⚠ ${esc(err.message)}</div>`;
-        } finally {
-            bubble.classList.remove('streaming');
-            state.isStreaming = false;
-            document.getElementById('chat-send').disabled = false;
-            msgs.scrollTop = msgs.scrollHeight;
+            buffer += decoder.decode(chunk.value, { stream: true });
+
+            // SSE lines end with \n\n; split on newlines and process complete ones
+            var lines = buffer.split('\n');
+            buffer = lines.pop(); // last element may be an incomplete line
+
+            lines.forEach(function (line) {
+              if (!line.startsWith('data: ')) return;
+              try {
+                var msg = JSON.parse(line.slice(6));
+
+                if (msg.sources !== undefined) {
+                  renderSources(msg.sources);
+                }
+                if (msg.chunk) {
+                  assistantText += msg.chunk;
+                  assistantBubble.textContent = assistantText;
+                  scrollToBottom();
+                }
+                if (msg.error) {
+                  assistantBubble.textContent = '⚠ ' + msg.error;
+                  setStreaming(false);
+                }
+                if (msg.done) {
+                  setStreaming(false);
+                }
+              } catch (_) {
+                // ignore malformed JSON lines
+              }
+            });
+
+            return pump();
+          });
         }
-    }
 
-    function appendMessage(role, text) {
-        const msgs = document.getElementById('messages');
-        const el = document.createElement('div');
-        el.className = 'message';
-        el.innerHTML = `
-    <div class="msg-role ${role}">${role === 'user' ? 'you' : 'assistant'}</div>
-    <div class="msg-bubble ${role}">${text ? `<div class="md-preview">${renderMarkdown(text)}</div>` : ''}</div>`;
-        msgs.appendChild(el);
-        msgs.scrollTop = msgs.scrollHeight;
-        return el;
-    }
+        return pump();
+      })
+      .catch(function (err) {
+        assistantBubble.textContent =
+          '⚠ Could not reach the server. Is Ollama running? (' + err.message + ')';
+        setStreaming(false);
+      });
+  }
 
-    function renderSources(msgEl, sources) {
-        if (!sources?.length) return;
-        const div = document.createElement('div');
-        div.className = 'sources';
-        div.innerHTML = `
-    <div class="sources-label">Context from ${sources.length} note${sources.length !== 1 ? 's' : ''}</div>
-    <div class="sources-list">${sources.map(s => {
-            const tags = (s.tags||[]).slice(0,2).map(t=>`<span style="color:var(--accent-dim)"> #${esc(t)}</span>`).join('');
-            return `<div class="source-chip" onclick="selectNote(${s.id});switchView('notes')" title="${esc(s.preview)}">
-        <span class="source-id">#${s.id}</span>${esc(s.preview.slice(0,36))}…${tags}
-      </div>`;
-        }).join('')}</div>`;
-        msgEl.insertBefore(div, msgEl.querySelector('.msg-bubble'));
-    }
+  // ── Event listeners ──────────────────────────────────────────────────────
 
-    // Auto-resize chat textarea
-    function autoResize(el) {
-        el.style.height = 'auto';
-        el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+  sendBtn.addEventListener('click', sendMessage);
+
+  chatInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
     }
-    document.getElementById('chat-input').addEventListener('input', function() { autoResize(this); });
-    document.getElementById('chat-input').addEventListener('keydown', e => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
-    });
+  });
+
+  // Auto-grow textarea as the user types
+  chatInput.addEventListener('input', function () {
+    this.rows = 1;
+    const lineHeight = parseInt(getComputedStyle(this).lineHeight, 10) || 20;
+    const rows = Math.min(6, Math.ceil(this.scrollHeight / lineHeight));
+    this.rows = rows;
+  });
+})();

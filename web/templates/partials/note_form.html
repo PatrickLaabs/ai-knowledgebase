@@ -1,0 +1,155 @@
+{{define "note_form"}}
+<div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4">
+
+  <div class="bg-gray-900 border border-gray-800 rounded-t-2xl sm:rounded-xl shadow-2xl
+              w-full sm:max-w-5xl flex flex-col h-[95dvh] sm:h-[78dvh]">
+
+    <!-- ── Header ── -->
+    <div class="flex items-center justify-between px-4 sm:px-5 py-3
+                border-b border-gray-800 flex-shrink-0">
+      <div class="flex items-center gap-2 min-w-0">
+        <h2 class="font-medium text-sm truncate">
+          {{if .ID}}Edit note{{else}}New note{{end}}
+        </h2>
+        {{if .HasDraft}}
+        <span class="hidden sm:inline text-xs px-1.5 py-0.5 bg-amber-900/40 text-amber-400
+                     border border-amber-700/40 rounded whitespace-nowrap flex-shrink-0">
+          unsaved changes restored
+        </span>
+        {{end}}
+      </div>
+      <div class="flex items-center gap-3 flex-shrink-0">
+        <span id="draft-indicator" class="text-xs text-gray-600 hidden sm:block"></span>
+        <button type="button"
+                hx-delete="/drafts?id={{.ID}}"
+                hx-target="#note-modal"
+                hx-swap="innerHTML"
+                title="Close"
+                class="text-gray-500 hover:text-gray-300 text-xl leading-none transition-colors
+                       w-7 h-7 flex items-center justify-center rounded hover:bg-gray-800">✕</button>
+      </div>
+    </div>
+
+    <!-- ── Tag chip input ── -->
+    <div class="px-4 sm:px-5 pt-3 flex-shrink-0">
+      <div class="flex items-start gap-2">
+        <label class="text-xs font-medium text-gray-500 whitespace-nowrap mt-1.5">Tags</label>
+        <div id="tag-chip-box"
+             class="flex flex-wrap gap-1.5 flex-1 min-h-[34px]
+                    bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5
+                    focus-within:ring-1 focus-within:ring-indigo-500 cursor-text">
+          {{range .Tags}}
+          <span class="tag-chip inline-flex items-center gap-1 text-xs px-2 py-0.5
+                       bg-indigo-950 text-indigo-300 border border-indigo-800/60 rounded"
+                data-tag="{{.}}">
+            {{.}}<button type="button"
+                         class="tag-chip-remove text-indigo-500 hover:text-indigo-200 leading-none ml-0.5">×</button>
+          </span>
+          {{end}}
+          <input type="text"
+                 id="tag-input-field"
+                 placeholder="type a tag…"
+                 autocomplete="off"
+                 class="flex-1 min-w-[100px] bg-transparent text-xs text-gray-100
+                        placeholder-gray-600 outline-none py-0.5 cursor-text" />
+        </div>
+        <button type="button"
+                onclick="window.addTagFromInput()"
+                class="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium
+                       bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg
+                       transition-colors mt-0.5">
+          Add
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Mobile tab bar (z-10 keeps it above the form panes) ── -->
+    <div class="relative z-10 flex sm:hidden border-b border-gray-800 mt-3 flex-shrink-0">
+      <button type="button" id="tab-edit"
+              class="flex-1 py-2.5 text-xs font-medium text-indigo-400
+                     border-b-2 border-indigo-500 transition-colors">Edit</button>
+      <button type="button" id="tab-preview"
+              class="flex-1 py-2.5 text-xs font-medium text-gray-500
+                     border-b-2 border-transparent transition-colors">Preview</button>
+    </div>
+
+    <!-- ── Editor / Preview (form contains only the panes + hidden tags) ── -->
+    <form id="note-form"
+          {{if .ID}}hx-put="/notes/{{.ID}}"{{else}}hx-post="/notes"{{end}}
+          hx-target="#notes-list"
+          hx-swap="innerHTML"
+          class="flex flex-col sm:flex-row flex-1 overflow-hidden
+                 px-4 sm:px-5 pt-3 gap-3 sm:gap-4 min-h-0">
+
+      <!-- Hidden tags value — lives inside the form so it's always serialised -->
+      <input type="hidden" id="note-tags" name="tags" value="{{joinTags .Tags}}" />
+
+      <!-- Editor pane -->
+      <div id="pane-edit" class="flex flex-col gap-1 flex-1 min-h-0 min-w-0">
+        <label class="text-xs font-medium text-gray-500 hidden sm:block">Editor</label>
+        <textarea name="content" id="note-content" required
+                  class="flex-1 w-full bg-gray-800 border border-gray-700 rounded-lg
+                         px-3 py-2.5 text-sm text-gray-100 placeholder-gray-500
+                         resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500
+                         font-mono leading-relaxed"
+                  placeholder="Write your note in Markdown…"
+                  hx-post="/drafts/save?id={{.ID}}"
+                  hx-trigger="keyup changed delay:800ms"
+                  hx-target="#draft-indicator"
+                  hx-swap="innerHTML"
+                  hx-include="#note-tags">{{.Content}}</textarea>
+      </div>
+
+      <!-- Preview pane (hidden on mobile until tab switch) -->
+      <div id="pane-preview" class="hidden sm:flex flex-col gap-1 flex-1 min-h-0 min-w-0">
+        <label class="text-xs font-medium text-gray-500 hidden sm:block">Preview</label>
+        <div id="md-preview"
+             class="flex-1 bg-gray-800/50 border border-gray-700/50 rounded-lg
+                    px-3 py-2.5 overflow-y-auto text-sm text-gray-300 md-preview">
+          <span class="text-gray-600 text-xs">Preview will appear here…</span>
+        </div>
+      </div>
+
+    </form>
+
+    <!-- ── Footer (outside form, no absolute positioning) ── -->
+    <div class="flex items-center justify-between gap-2 px-4 sm:px-5 py-3
+                border-t border-gray-800 flex-shrink-0">
+
+      <!-- Delete (edit mode only) -->
+      <div>
+        {{if .ID}}
+        <button type="button"
+                hx-delete="/notes/{{.ID}}"
+                hx-target="#notes-list"
+                hx-swap="innerHTML"
+                hx-confirm="Delete this note? This cannot be undone."
+                class="px-3 py-2 text-sm text-red-500 hover:text-red-400
+                       hover:bg-red-950/40 rounded-lg transition-colors">
+          Delete note
+        </button>
+        {{end}}
+      </div>
+
+      <!-- Cancel / Save -->
+      <div class="flex gap-2">
+        <button type="button"
+                hx-delete="/drafts?id={{.ID}}"
+                hx-target="#note-modal"
+                hx-swap="innerHTML"
+                class="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 transition-colors">
+          Cancel
+        </button>
+        <button type="submit"
+                form="note-form"
+                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm
+                       font-medium rounded-lg transition-colors htmx-request:opacity-60"
+                hx-disabled-elt="this">
+          {{if .ID}}Save changes{{else}}Create note{{end}}
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+{{end}}

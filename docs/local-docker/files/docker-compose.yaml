@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   app:
-    image: ghcr.io/patricklaabs/ai-knowledgebase:0.1.0
+    image: ghcr.io/patricklaabs/ai-knowledgebase:0.3.0
     container_name: ai-knowledgebase-app
     ports:
       - "8080:8080"

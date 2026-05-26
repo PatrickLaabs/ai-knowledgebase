@@ -1,0 +1,63 @@
+{{define "login"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <title>Login – AI Knowledge base</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen flex items-center justify-center">
+<div class="w-full max-w-sm px-4">
+
+  <div class="mb-8 text-center">
+    <div class="text-3xl mb-2">🧠</div>
+    <h1 class="text-2xl font-semibold tracking-tight">AI Knowledge base</h1>
+    <p class="text-sm text-gray-500 mt-1">Sign in to your AI Knowledge base</p>
+  </div>
+
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-xl">
+    <div id="auth-error"></div>
+
+    <form hx-post="/login"
+          hx-target="#auth-error"
+          hx-swap="innerHTML"
+          class="space-y-4">
+
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-1" for="username">Username</label>
+        <input id="username" name="username" type="text" required autocomplete="username"
+               class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm
+                        text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2
+                        focus:ring-indigo-500 focus:border-transparent"
+               placeholder="your username" />
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-1" for="password">Password</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password"
+               class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm
+                        text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2
+                        focus:ring-indigo-500 focus:border-transparent"
+               placeholder="••••••••" />
+      </div>
+
+      <button type="submit"
+              class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4
+                       rounded-lg text-sm transition-colors htmx-request:opacity-60"
+              hx-disabled-elt="this">
+        Sign in
+      </button>
+    </form>
+
+    <p class="mt-4 text-center text-sm text-gray-500">
+      No account? <a href="/register" class="text-indigo-400 hover:text-indigo-300">Register</a>
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
+{{end}}

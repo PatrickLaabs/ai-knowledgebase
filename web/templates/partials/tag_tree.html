@@ -1,0 +1,41 @@
+{{define "tag_node"}}
+<li class="text-xs">
+  {{if .Children}}
+  <details class="group">
+    <summary class="flex items-center gap-1.5 px-2 py-1 rounded-md
+                    hover:bg-gray-800 text-gray-400 hover:text-gray-200
+                    transition-colors select-none"
+             hx-get="/notes?tag={{.FullPath}}"
+             hx-trigger="click"
+             hx-target="#notes-list"
+             hx-swap="innerHTML">
+      <span class="text-gray-600 transition-transform group-open:rotate-90 inline-block">▶</span>
+      <span class="font-medium">{{.Label}}</span>
+    </summary>
+    <ul class="pl-4 mt-0.5 space-y-0.5 border-l border-gray-800 ml-3">
+      {{range .Children}}{{template "tag_node" .}}{{end}}
+    </ul>
+  </details>
+  {{else}}
+  <button class="w-full flex items-center gap-1.5 px-2 py-1 rounded-md
+                 hover:bg-gray-800 text-gray-400 hover:text-gray-200
+                 transition-colors text-left"
+          hx-get="/notes?tag={{.FullPath}}"
+          hx-target="#notes-list"
+          hx-swap="innerHTML">
+    <span class="text-gray-700">◆</span>
+    {{.Label}}
+  </button>
+  {{end}}
+</li>
+{{end}}
+
+{{define "tag_tree"}}
+{{if .}}
+<ul class="space-y-0.5 py-1">
+  {{range .}}{{template "tag_node" .}}{{end}}
+</ul>
+{{else}}
+<p class="px-3 py-2 text-xs text-gray-600">No tags yet.</p>
+{{end}}
+{{end}}
