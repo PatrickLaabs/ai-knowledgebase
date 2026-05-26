@@ -97,27 +97,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := initTemplates(webFS); err != nil {
+		slog.Error("failed to parse templates", "error", err)
+		os.Exit(1)
+	}
+
 	// ── Server ────────────────────────────────────────────────────────────────
 	srv := &Server{ollama: ollamaClient, db: pool, rdb: rdb}
 	mux := http.NewServeMux()
 
 	// Helper to wrap a handler with requireAuth cleanly.
 	auth := func(h http.HandlerFunc) http.Handler { return srv.requireAuth(h) }
+	authHTML := func(h http.HandlerFunc) http.Handler { return srv.requireAuthHTML(h) }
 
-	// Static files + SPA shell
-	mux.Handle("GET /static/", http.FileServerFS(webFS))
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, webFS, "index.html")
-	})
-
-	// Public — no auth required
+	// Public JSON API — no auth required
 	mux.HandleFunc("GET /api/health", srv.handleHealth)
 	mux.HandleFunc("GET /api/auth/me", srv.handleMe)
 	mux.HandleFunc("POST /api/auth/login", srv.handleLogin)
 	mux.HandleFunc("POST /api/auth/logout", srv.handleLogout)
 	mux.HandleFunc("POST /api/auth/register", srv.handleRegister)
 
-	// Protected — valid session required
+	// Protected JSON API — valid session required
 	mux.Handle("GET /api/notes", auth(srv.handleListNotes))
 	mux.Handle("POST /api/notes", auth(srv.handleCreateNote))
 	mux.Handle("PUT /api/notes/{id}", auth(srv.handleUpdateNote))
@@ -126,6 +126,28 @@ func main() {
 	mux.Handle("POST /api/chat", auth(srv.handleChat))
 	mux.Handle("POST /api/admin/reindex", auth(srv.handleStartReindex))
 	mux.Handle("GET /api/admin/reindex/status", auth(srv.handleReindexStatus))
+
+	mux.Handle("GET /static/", http.FileServerFS(webFS))
+	mux.HandleFunc("GET /", srv.handleRoot)
+	mux.HandleFunc("GET /login", srv.handleLoginPage)
+	mux.HandleFunc("POST /login", srv.handleLoginPost)
+	mux.HandleFunc("GET /register", srv.handleRegisterPage)
+	mux.HandleFunc("POST /register", srv.handleRegisterPost)
+	mux.HandleFunc("POST /logout", srv.handleLogoutPost)
+	mux.Handle("GET /app", authHTML(srv.handleAppPage))
+	mux.Handle("POST /drafts/save", authHTML(srv.handleSaveDraft))
+	mux.Handle("DELETE /drafts", authHTML(srv.handleDiscardDraft))
+
+	mux.Handle("GET /notes", authHTML(srv.handleNotesPartial))
+	mux.Handle("GET /notes/new", authHTML(srv.handleNoteNewForm))
+	mux.Handle("POST /notes", authHTML(srv.handleCreateNotePartial))
+	mux.Handle("GET /notes/{id}/edit", authHTML(srv.handleNoteEditForm))
+	mux.Handle("PUT /notes/{id}", authHTML(srv.handleUpdateNotePartial))
+	mux.Handle("DELETE /notes/{id}", authHTML(srv.handleDeleteNotePartial))
+	mux.Handle("GET /tags/tree", authHTML(srv.handleTagTreePartial))
+
+	// Utility: empties a target div (used to close modals)
+	mux.HandleFunc("GET /empty", srv.handleEmpty)
 
 	slog.Info("server ready", "addr", ListenAddr)
 	if err := http.ListenAndServe(ListenAddr, loggingMiddleware(mux)); err != nil {

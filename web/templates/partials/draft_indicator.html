@@ -1,0 +1,7 @@
+{{define "draft_indicator"}}
+{{if eq .Status "saved"}}
+  <span class="text-gray-600">draft saved {{.SavedAt}}</span>
+{{else if eq .Status "error"}}
+  <span class="text-red-500">draft save failed</span>
+{{end}}
+{{end}}

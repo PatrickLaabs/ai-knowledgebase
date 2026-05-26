@@ -1,0 +1,292 @@
+{{define "app"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <title>AI Knowledge base</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@4/marked.min.js"></script>
+  <style>
+    /* Sidebar collapse transition */
+    #sidebar {
+      transition: width 200ms ease, min-width 200ms ease, padding 200ms ease;
+    }
+    #sidebar.collapsed {
+      width: 0 !important;
+      min-width: 0 !important;
+      overflow: hidden;
+      border-right-width: 0;
+    }
+    #sidebar-toggle {
+      transition: transform 200ms ease;
+    }
+    #sidebar.collapsed ~ main #sidebar-toggle {
+      transform: rotate(180deg);
+    }
+    /* Tailwind JIT safelist: h-[95dvh] h-[88dvh] */
+    /* Sidebar details/summary reset */
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+    /* Prose styles for markdown preview */
+    .md-preview h1,.md-preview h2,.md-preview h3 { font-weight:600; margin-top:.75em; margin-bottom:.25em; }
+    .md-preview h1 { font-size:1.2em; }
+    .md-preview h2 { font-size:1.05em; }
+    .md-preview h3 { font-size:.95em; }
+    .md-preview p  { margin-bottom:.5em; }
+    .md-preview ul { list-style-type: disc;    padding-left:1.5em; margin-bottom:.5em; }
+    .md-preview ol { list-style-type: decimal; padding-left:1.5em; margin-bottom:.5em; }
+    .md-preview ul ul   { list-style-type: circle; margin-bottom:0; }
+    .md-preview ul ul ul { list-style-type: square; margin-bottom:0; }
+    .md-preview li { display: list-item; margin-bottom:.15em; }
+    .md-preview li::marker { color: #818cf8; }
+    .md-preview code { background:#1e293b; border-radius:.25em; padding:.1em .35em; font-size:.85em; font-family:monospace; }
+    .md-preview pre code { display:block; padding:.75em; overflow-x:auto; }
+    .md-preview blockquote { border-left:3px solid #4f46e5; padding-left:.75em; color:#94a3b8; }
+    .md-preview a { color:#818cf8; text-decoration:underline; }
+    .md-preview hr { border-color:#334155; margin:.75em 0; }
+    .md-preview table { border-collapse:collapse; width:100%; margin-bottom:.5em; }
+    .md-preview th,.md-preview td { border:1px solid #334155; padding:.3em .6em; font-size:.85em; }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 h-screen flex overflow-hidden">
+
+<!-- ── Sidebar ─────────────────────────────────────── -->
+<aside id="sidebar" class="w-60 flex-shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden">
+
+  <!-- Header -->
+  <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
+    <div>
+      <span class="font-semibold text-sm">🧠 AI Knowledge base</span>
+      <p class="text-xs text-gray-500 mt-0.5">{{.User.Username}}</p>
+    </div>
+    <div class="flex items-center gap-1">
+      <button onclick="toggleSidebar()"
+              title="Collapse sidebar"
+              class="text-gray-500 hover:text-gray-300 text-sm px-2 py-1 rounded
+                       hover:bg-gray-800 transition-colors">
+        ◀
+      </button>
+      <button hx-post="/logout"
+              title="Sign out"
+              class="text-gray-500 hover:text-gray-300 text-sm px-2 py-1 rounded
+                       hover:bg-gray-800 transition-colors">
+        ⎋
+      </button>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <div class="px-3 pt-3 flex-shrink-0">
+    <input type="text"
+           name="search"
+           placeholder="Search notes…"
+           hx-get="/notes"
+           hx-trigger="keyup changed delay:350ms"
+           hx-target="#notes-list"
+           hx-swap="innerHTML"
+           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs
+                    text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1
+                    focus:ring-indigo-500" />
+  </div>
+
+  <!-- New note -->
+  <div class="px-3 pt-2 flex-shrink-0">
+    <button hx-get="/notes/new"
+            hx-target="#note-modal"
+            hx-swap="innerHTML"
+            class="w-full text-left text-xs px-3 py-1.5 rounded-lg
+                     bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300
+                     border border-indigo-600/30 transition-colors flex items-center gap-2">
+      <span class="text-base leading-none">+</span> New note
+    </button>
+  </div>
+
+  <!-- ── Tag tree ── -->
+  <div class="px-3 pt-3 pb-1 flex-shrink-0">
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Tags</p>
+  </div>
+  <div id="tag-tree" class="flex-shrink-0 overflow-y-auto max-h-48 px-1">
+    {{template "tag_tree" .TagTree}}
+  </div>
+
+  <!-- ── Notes list (filtered) ── -->
+  <div class="px-3 pt-3 pb-1 flex-shrink-0">
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</p>
+  </div>
+  <div id="notes-list" class="flex-1 overflow-y-auto">
+    {{template "notes_list" .Notes}}
+  </div>
+
+  <!-- Reindex -->
+  <div class="px-3 py-3 border-t border-gray-800 flex-shrink-0">
+    <button hx-post="/api/admin/reindex"
+            hx-target="#reindex-status"
+            hx-swap="innerHTML"
+            class="w-full text-xs px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700
+                     text-gray-400 hover:text-gray-200 transition-colors text-left"
+            hx-disabled-elt="this">
+      ↺ Re-index notes
+    </button>
+    <div id="reindex-status" class="text-xs text-gray-500 mt-1"></div>
+  </div>
+</aside>
+
+<!-- ── Main: Chat ─────────────────────────────────── -->
+<main class="flex-1 flex flex-col overflow-hidden relative">
+
+  <!-- Expand sidebar button — only visible when sidebar is collapsed -->
+  <button id="sidebar-expand"
+          onclick="toggleSidebar()"
+          title="Open sidebar"
+          style="display:none"
+          class="absolute left-0 top-1/2 -translate-y-1/2 z-20
+                   bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200
+                   border border-gray-700 rounded-r-lg
+                   px-1.5 py-3 transition-colors shadow-lg">
+    ▶
+  </button>
+
+  <!-- Note modal (create / edit). Empty = hidden via JS in editor.js -->
+  <div id="note-modal"></div>
+
+  <!-- Chat header -->
+  <div class="px-6 py-3 border-b border-gray-800 flex items-center gap-2 flex-shrink-0">
+    <span class="text-sm font-medium text-gray-300">Chat</span>
+    <span class="text-xs text-gray-600">— ask anything about your notes</span>
+  </div>
+
+  <!-- Messages -->
+  <div id="chat-messages" class="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+    <p class="text-sm text-gray-600 text-center pt-12 select-none">
+      Start a conversation to search and reason over your notes.
+    </p>
+  </div>
+
+  <!-- Sources -->
+  <div id="chat-sources" class="px-6 py-2 text-xs text-gray-500 border-t border-gray-800/50 hidden"></div>
+
+  <!-- Chat input -->
+  <div class="px-3 sm:px-6 py-3 sm:py-4 border-t border-gray-800 flex-shrink-0">
+    <!-- Mobile: textarea full width, send button full width below.
+         sm+: side by side. -->
+    <div class="flex flex-col sm:flex-row gap-2">
+        <textarea id="chat-input" rows="1" placeholder="Ask a question…"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm
+                         text-gray-100 placeholder-gray-500 resize-none
+                         focus:outline-none focus:ring-2 focus:ring-indigo-500
+                         max-h-32 min-h-[44px]"></textarea>
+      <button id="chat-send"
+              class="w-full sm:w-auto flex-shrink-0
+                       bg-indigo-600 hover:bg-indigo-500
+                       disabled:opacity-40 disabled:cursor-not-allowed
+                       text-white rounded-xl px-6 py-2.5 text-sm font-medium transition-colors">
+        Send
+      </button>
+    </div>
+    <p class="hidden sm:block text-xs text-gray-600 mt-2">Enter to send · Shift+Enter for newline</p>
+  </div>
+</main>
+
+<script>
+  // Tag chip functions defined inline — guaranteed to run regardless of
+  // whether editor.js loads successfully from the embedded filesystem.
+
+  function getTags() {
+    var h = document.getElementById('note-tags');
+    if (!h || !h.value.trim()) return [];
+    return h.value.split(',').map(function(t){ return t.trim(); }).filter(Boolean);
+  }
+  function syncHidden() {
+    var h = document.getElementById('note-tags');
+    var box = document.getElementById('tag-chip-box');
+    if (!h || !box) return;
+    var tags = [];
+    box.querySelectorAll('.tag-chip[data-tag]').forEach(function(c){ tags.push(c.dataset.tag); });
+    h.value = tags.join(',');
+  }
+  function removeChip(chip) { chip.remove(); syncHidden(); }
+  function addChip(raw) {
+    var tag = raw.trim().replace(/,/g, '');
+    if (!tag) return;
+    if (getTags().indexOf(tag) !== -1) return;
+    var box   = document.getElementById('tag-chip-box');
+    var field = document.getElementById('tag-input-field');
+    if (!box || !field) return;
+    var chip = document.createElement('span');
+    chip.className   = 'tag-chip inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-indigo-950 text-indigo-300 border border-indigo-800/60 rounded';
+    chip.dataset.tag = tag;
+    chip.appendChild(document.createTextNode(tag + ' '));
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tag-chip-remove text-indigo-500 hover:text-indigo-200 leading-none';
+    btn.textContent = '\u00d7';
+    btn.onclick = function(){ removeChip(chip); };
+    chip.appendChild(btn);
+    box.insertBefore(chip, field);
+    field.value = '';
+    syncHidden();
+  }
+  function addTagFromInput() {
+    var field = document.getElementById('tag-input-field');
+    if (!field || !field.value.trim()) return;
+    addChip(field.value);
+    field.focus();
+  }
+  window.addTagFromInput = addTagFromInput;
+
+  // ── Sidebar collapse ──────────────────────────────────────────────────────
+  function toggleSidebar() {
+    var sidebar = document.getElementById('sidebar');
+    var expand  = document.getElementById('sidebar-expand');
+    if (!sidebar) return;
+    var collapsed = sidebar.classList.toggle('collapsed');
+    if (expand) expand.style.display = collapsed ? 'block' : 'none';
+    // Persist across page reloads
+    try { localStorage.setItem('sidebar-collapsed', collapsed ? '1' : '0'); } catch(_) {}
+  }
+  // Restore state on load.
+  // On mobile (< 640px) default to collapsed unless the user has explicitly
+  // opened it before (stored as '0' in localStorage).
+  (function() {
+    var sidebar = document.getElementById('sidebar');
+    var expand  = document.getElementById('sidebar-expand');
+    try {
+      var stored = localStorage.getItem('sidebar-collapsed');
+      var isMobile = window.innerWidth < 640;
+      // Collapse if: explicitly saved as collapsed, OR mobile with no saved preference.
+      var shouldCollapse = (stored === '1') || (isMobile && stored === null);
+      if (shouldCollapse) {
+        if (sidebar) sidebar.classList.add('collapsed');
+        if (expand)  expand.style.display = 'block';
+      }
+    } catch(_) {
+      // localStorage blocked — fall back to mobile default
+      if (window.innerWidth < 640) {
+        if (sidebar) sidebar.classList.add('collapsed');
+        if (expand)  expand.style.display = 'block';
+      }
+    }
+  }());
+
+  document.addEventListener('keydown', function(e) {
+    if (!e.target || e.target.id !== 'tag-input-field') return;
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault(); e.stopPropagation(); addTagFromInput();
+    } else if (e.key === 'Backspace' && e.target.value === '') {
+      var box = document.getElementById('tag-chip-box');
+      var chips = box ? box.querySelectorAll('.tag-chip') : [];
+      if (chips.length > 0) removeChip(chips[chips.length - 1]);
+    }
+  });
+  document.addEventListener('focusout', function(e) {
+    if (e.target && e.target.id === 'tag-input-field' && e.target.value.trim()) addTagFromInput();
+  });
+</script>
+<script src="/static/js/editor.js"></script>
+<script src="/static/js/chat.js"></script>
+</body>
+</html>
+{{end}}

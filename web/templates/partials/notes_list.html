@@ -1,0 +1,31 @@
+{{define "notes_list"}}
+{{if .}}
+  {{range .}}
+  <div class="group relative px-3 py-2.5 hover:bg-gray-800/70 cursor-pointer border-b border-gray-800/50"
+       hx-get="/notes/{{.ID}}/edit"
+       hx-target="#note-modal"
+       hx-swap="innerHTML">
+
+    <p class="text-xs text-gray-300 leading-relaxed line-clamp-2 pr-5">
+      {{truncate .Content 20}}
+    </p>
+
+    {{if .Tags}}
+    <div class="flex flex-wrap gap-1 mt-1.5">
+      {{range .Tags}}
+      <span class="text-xs px-1.5 py-0.5 bg-indigo-950/70 text-indigo-400 rounded border border-indigo-800/40">
+        {{.}}
+      </span>
+      {{end}}
+    </div>
+    {{end}}
+
+    <div class="flex items-center justify-between mt-1">
+      <span class="text-xs text-gray-600">{{fmtDate .UpdatedAt}}</span>
+    </div>
+  </div>
+  {{end}}
+{{else}}
+  <p class="px-4 py-8 text-xs text-gray-600 text-center">No notes yet.<br>Create one to get started.</p>
+{{end}}
+{{end}}
