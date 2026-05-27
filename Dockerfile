@@ -1,6 +1,45 @@
 # syntax=docker/dockerfile:1
 
-# ── Stage 1: Build ────────────────────────────────────────────────────────────
+# ── Stage 1: Build Tailwind CSS ───────────────────────────────────────────────
+# Debian slim has glibc — required by the Tailwind standalone binary.
+# Alpine uses musl and cannot execute the binary even if it downloads correctly.
+FROM debian:bookworm-slim AS css-builder
+
+# BUILDARCH reflects the machine running this stage (the builder).
+# TARGETARCH reflects what the Go binary will run on — different when cross-compiling.
+# The Tailwind binary must match the builder, not the target.
+ARG BUILDARCH
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Download the correct standalone Tailwind CLI binary for the build architecture.
+# Must happen before WORKDIR so the path is /usr/local/bin, not /build/usr/local/bin.
+RUN set -eux; \
+    case "${BUILDARCH}" in \
+      amd64) TW_ARCH="x64"  ;; \
+      arm64) TW_ARCH="arm64" ;; \
+      *)     echo "Unsupported arch: ${BUILDARCH}" && exit 1 ;; \
+    esac; \
+    curl -fsSL \
+      "https://github.com/tailwindlabs/tailwindcss/releases/download/v4.1.7/tailwindcss-linux-${TW_ARCH}" \
+      -o /usr/local/bin/tailwindcss && \
+    chmod +x /usr/local/bin/tailwindcss
+
+WORKDIR /build
+
+RUN tailwindcss --version
+
+COPY tailwind.config.js .
+COPY web/static/css/tailwind.src ./web/static/css/tailwind.src
+COPY web/templates                   ./web/templates
+COPY web/static/js                   ./web/static/js
+
+RUN tailwindcss \
+      --input ./web/static/css/tailwind.src \
+      --output ./web/static/css/tailwind.css
+
+# ── Stage 2: Build ────────────────────────────────────────────────────────────
 FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
@@ -12,6 +51,10 @@ RUN go mod download && go mod verify
 
 # Copy the full source tree (controlled by .dockerignore).
 COPY . .
+
+# Overwrite the placeholder/missing tailwind.css with the compiled output
+# from the css-builder stage so it gets embedded into the binary.
+COPY --from=css-builder /build/web/static/css/tailwind.css ./web/static/css/tailwind.css
 
 # Build a statically linked, stripped binary.
 #
@@ -29,7 +72,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
       -o knowledge-base \
       .
 
-# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
+# ── Stage 3: Runtime ──────────────────────────────────────────────────────────
 # Pinned to a specific minor version — no surprise updates between deploys.
 FROM alpine:3.23.4
 
@@ -45,7 +88,6 @@ USER kb
 
 # Copy only what the binary needs at runtime.
 COPY --from=builder --chown=kb:kb /app/knowledge-base .
-COPY --chown=kb:kb /web ./web
 
 EXPOSE 8080
 

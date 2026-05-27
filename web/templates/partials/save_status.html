@@ -1,0 +1,23 @@
+{{define "save_status"}}
+<!--
+  Primary target: #save-status-target inside the note form footer.
+  htmx polls GET /notes/save-status/{JobID} every 1.5s until the server
+  returns something other than this partial (done → notes list, error → error partial).
+-->
+<div id="save-status-target"
+     hx-get="/api/save-status/{{.JobID}}"
+     hx-trigger="every 1500ms"
+     hx-target="#save-status-target"
+     hx-swap="outerHTML"
+     class="flex items-center gap-2 text-xs text-indigo-400">
+  <!-- Spinning ring -->
+  <svg class="animate-spin h-3.5 w-3.5 text-indigo-400"
+       xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle class="opacity-25" cx="12" cy="12" r="10"
+            stroke="currentColor" stroke-width="4"></circle>
+    <path class="opacity-75" fill="currentColor"
+          d="M4 12a8 8 0 018-8v8H4z"></path>
+  </svg>
+  {{.Message}}
+</div>
+{{end}}
