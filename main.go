@@ -53,14 +53,20 @@ func main() {
 		slog.Error("failed to open migration db", "error", err)
 		os.Exit(1)
 	}
-	goose.SetDialect("postgres")
+	err = goose.SetDialect("postgres")
+	if err != nil {
+		slog.Error("failed to set dialect", "error", err)
+	}
 	goose.SetBaseFS(embedMigrations)
 	slog.Info("running migrations…")
 	if err := goose.Up(migrationDB, "migrations"); err != nil {
 		slog.Error("migration failed", "error", err)
 		os.Exit(1)
 	}
-	migrationDB.Close()
+	err = migrationDB.Close()
+	if err != nil {
+		slog.Error("failed to close migration db", "error", err)
+	}
 
 	// ── Postgres pool ─────────────────────────────────────────────────────────
 	poolCfg, err := pgxpool.ParseConfig(DBUrl)

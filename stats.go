@@ -3,6 +3,7 @@ package main
 import (
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -50,7 +51,7 @@ func (s *Server) queryIndexStats(r *http.Request, userID int) IndexStats {
 	}
 
 	// Last reindex time, stored in Valkey by the reindex job (if present).
-	if ts, err := s.rdb.Get(ctx, "reindex:last:"+itoa(userID)).Result(); err == nil && ts != "" {
+	if ts, err := s.rdb.Get(ctx, "reindex:last:"+strconv.Itoa(userID)).Result(); err == nil && ts != "" {
 		if parsed, perr := time.Parse(time.RFC3339, ts); perr == nil {
 			stats.LastReindex = humanizeSince(parsed)
 		}
@@ -72,33 +73,10 @@ func humanizeSince(t time.Time) string {
 	case d < time.Minute:
 		return "just now"
 	case d < time.Hour:
-		return itoa(int(d.Minutes())) + "m ago"
+		return strconv.Itoa(int(d.Minutes())) + "m ago"
 	case d < 24*time.Hour:
-		return itoa(int(d.Hours())) + "h ago"
+		return strconv.Itoa(int(d.Hours())) + "h ago"
 	default:
-		return itoa(int(d.Hours()/24)) + "d ago"
+		return strconv.Itoa(int(d.Hours()/24)) + "d ago"
 	}
-}
-
-// itoa is a tiny strconv.Itoa wrapper kept local to avoid an import churn.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }
