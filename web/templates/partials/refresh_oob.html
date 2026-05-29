@@ -1,0 +1,9 @@
+{{define "refresh_oob"}}
+{{/*
+*/}}
+<div id="note-modal" hx-swap-oob="true"></div>
+<div id="tag-tree" hx-swap-oob="true">
+  {{template "tag_tree" .TagTree}}
+</div>
+{{template "notes_list" .Notes}}
+{{end}}

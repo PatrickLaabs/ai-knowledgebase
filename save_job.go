@@ -27,7 +27,7 @@ const (
 
 type SaveJob struct {
 	Status  SaveJobStatus `json:"status"`
-	NoteID  int           `json:"note_id"` // 0 = new note
+	NoteID  int           `json:"note_id"`
 	UserID  int           `json:"user_id"`
 	Content string        `json:"content"`
 	Tags    []string      `json:"tags"`
@@ -220,36 +220,11 @@ func (s *Server) handleSaveStatus(w http.ResponseWriter, r *http.Request) {
 func (s *Server) closeModalAndScheduleRefresh(w http.ResponseWriter, r *http.Request) {
 	user := userFromContext(r.Context())
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Tell the sidebar stats panel to refresh once this response lands.
+	w.Header().Set("HX-Trigger", "refresh-stats")
 
-	// OOB: clear the modal right away.
-	fmt.Fprint(w, `<div id="note-modal" hx-swap-oob="true"></div>`)
-
-	// OOB: replace notes list with a self-refreshing placeholder that polls
-	// once after 2 seconds — enough time for embedding to finish on most notes.
-	// On completion it swaps in the real list and stops polling.
-	fmt.Fprintf(w, `<div id="notes-list" hx-swap-oob="true"
-	     hx-get="/notes"
-	     hx-trigger="load delay:2s"
-	     hx-target="#notes-list"
-	     hx-swap="outerHTML">
-	  <div class="px-4 py-8 text-xs text-gray-600 text-center">
-	    <svg class="animate-spin h-4 w-4 text-indigo-500 mx-auto mb-2"
-	         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-	      <circle class="opacity-25" cx="12" cy="12" r="10"
-	              stroke="currentColor" stroke-width="4"></circle>
-	      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-	    </svg>
-	    Saving…
-	  </div>
-	</div>`)
-
-	// Also refresh the tag tree OOB in case new tags were added.
-	fmt.Fprint(w, `<div id="tag-tree" hx-swap-oob="true">`)
-	tmpl.ExecuteTemplate(w, "tag_tree", s.queryTagTree(r, user.UserID))
-	fmt.Fprint(w, `</div>`)
-
-	// Primary target: empty (the form submitted to #save-status-target,
-	// which gets cleared out since we're done with it).
-	fmt.Fprint(w, `<div id="save-status-target"></div>`)
+	// All the out-of-band swaps live in the save_oob partial.
+	s.render(w, "save_oob", map[string]any{
+		"TagTree": s.queryTagTree(r, user.UserID),
+	})
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -336,26 +335,16 @@ func (s *Server) handleEmpty(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-// refreshAndCloseModal writes the updated notes list as the primary htmx swap
-// target, plus an out-of-band swap that empties #note-modal.
-// This is the fix for bugs 1 & 3: no JS, no hx-on::after-request needed.
 func (s *Server) refreshAndCloseModal(w http.ResponseWriter, r *http.Request, userID int) {
 	notes, err := s.queryNotes(r, userID, "", "")
 	if err != nil {
 		slog.Error("refreshAndCloseModal: query failed", "error", err)
 		notes = []Note{}
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// OOB swap: clear the modal without touching the notes list target.
-	fmt.Fprint(w, `<div id="note-modal" hx-swap-oob="true"></div>`)
-	// Also refresh the tag tree OOB so new tags appear immediately.
-	fmt.Fprint(w, `<div id="tag-tree" hx-swap-oob="true">`)
-	tmpl.ExecuteTemplate(w, "tag_tree", s.queryTagTree(r, userID))
-	fmt.Fprint(w, `</div>`)
-	// Primary target (#notes-list): the updated notes list.
-	tmpl.ExecuteTemplate(w, "notes_list", notes)
+	s.render(w, "refresh_oob", map[string]any{
+		"Notes":   notes,
+		"TagTree": s.queryTagTree(r, userID),
+	})
 }
 
 // queryNotes fetches notes with optional tag/search filters.
