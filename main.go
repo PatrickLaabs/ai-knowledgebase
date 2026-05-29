@@ -126,8 +126,8 @@ func main() {
 	mux.Handle("POST /api/admin/reindex", auth(srv.handleStartReindex))
 	mux.Handle("GET /api/admin/reindex/status", auth(srv.handleReindexStatus))
 
-	// Async save status — under /api/ to avoid wildcard conflicts with /notes/{id}/*
 	mux.Handle("GET /api/save-status/{jobID}", authHTML(srv.handleSaveStatus))
+	mux.Handle("GET /api/stats", authHTML(srv.handleStats))
 
 	// ── Static assets ─────────────────────────────────────────────────────────
 	mux.Handle("GET /static/", http.FileServerFS(webFS))

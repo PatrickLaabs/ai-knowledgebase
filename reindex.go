@@ -76,6 +76,7 @@ func (s *Server) handleStartReindex(w http.ResponseWriter, r *http.Request) {
 
 	go s.runReindex(user.UserID, user.Username, st)
 
+	w.Header().Set("HX-Trigger", "refresh-stats")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(st)
@@ -166,6 +167,7 @@ func (s *Server) runReindex(userID int, username string, st ReindexStatus) {
 
 	st.Status = "done"
 	st.FinishedAt = time.Now().UTC().Format(time.RFC3339)
+	s.rdb.Set(ctx, "reindex:last:"+itoa(userID), time.Now().UTC().Format(time.RFC3339), 0)
 	s.saveReindexStatus(ctx, userID, st)
 	slog.Info("reindex: complete", "user", username, "completed", st.Completed, "failed", st.Failed)
 }

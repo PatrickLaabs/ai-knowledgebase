@@ -19,7 +19,8 @@ type Note struct {
 	Tags      []string
 	CreatedAt time.Time
 	UpdatedAt time.Time
-	HasDraft  bool // true when Valkey holds unsaved edits for this note
+	HasDraft  bool
+	Indexed   bool
 }
 
 // TagNode is one node in the hierarchical tag tree.
@@ -368,18 +369,18 @@ func (s *Server) queryNotes(r *http.Request, userID int, tag, search string) ([]
 		if err != nil {
 			return nil, err
 		}
-		sqlStr = `SELECT id, content, tags, created_at, updated_at
+		sqlStr = `SELECT id, content, tags, created_at, updated_at, embedding IS NOT NULL
 		          FROM notes WHERE embedding IS NOT NULL AND user_id = $2
 		          ORDER BY embedding <=> $1 LIMIT 50`
 		args = []any{pgvector.NewVector(emb), userID}
 	case tag != "":
-		sqlStr = `SELECT id, content, tags, created_at, updated_at
+		sqlStr = `SELECT id, content, tags, created_at, updated_at, embedding IS NOT NULL
 		          FROM notes WHERE user_id = $1
 		            AND EXISTS (SELECT 1 FROM unnest(tags) t WHERE t = $2 OR t LIKE $2 || '/%')
 		          ORDER BY updated_at DESC`
 		args = []any{userID, tag}
 	default:
-		sqlStr = `SELECT id, content, tags, created_at, updated_at
+		sqlStr = `SELECT id, content, tags, created_at, updated_at, embedding IS NOT NULL
 		          FROM notes WHERE user_id = $1 ORDER BY updated_at DESC`
 		args = []any{userID}
 	}
@@ -391,7 +392,7 @@ func (s *Server) queryNotes(r *http.Request, userID int, tag, search string) ([]
 	var notes []Note
 	for rows.Next() {
 		var n Note
-		if err := rows.Scan(&n.ID, &n.Content, &n.Tags, &n.CreatedAt, &n.UpdatedAt); err == nil {
+		if err := rows.Scan(&n.ID, &n.Content, &n.Tags, &n.CreatedAt, &n.UpdatedAt, &n.Indexed); err == nil {
 			if n.Tags == nil {
 				n.Tags = []string{}
 			}

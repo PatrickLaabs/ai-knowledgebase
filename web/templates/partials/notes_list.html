@@ -1,31 +1,49 @@
 {{define "notes_list"}}
 {{if .}}
-  {{range .}}
-  <div class="group relative px-3 py-2.5 hover:bg-gray-800/70 cursor-pointer border-b border-gray-800/50"
-       hx-get="/notes/{{.ID}}/edit"
-       hx-target="#note-modal"
-       hx-swap="innerHTML">
+{{range .}}
+<div class="group relative px-3 py-2.5 hover:bg-gray-800/70 cursor-pointer border-b border-gray-800/50"
+     hx-get="/notes/{{.ID}}/edit"
+     hx-target="#note-modal"
+     hx-swap="innerHTML">
 
-    <p class="text-xs text-gray-300 leading-relaxed line-clamp-2 pr-5">
-      {{truncate .Content 20}}
+  <!-- Content preview: first ~80 chars, with index status dot -->
+  <div class="flex items-start gap-1.5 pr-5">
+    <!-- Index status dot: green = indexed, amber pulse = pending -->
+    <span class="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full
+                   {{if .Indexed}}bg-emerald-500{{else}}bg-amber-500 animate-pulse{{end}}"
+          title="{{if .Indexed}}Indexed{{else}}Indexing pending{{end}}"></span>
+    <p class="text-xs text-gray-300 leading-relaxed line-clamp-2">
+      {{truncate .Content 90}}
     </p>
+  </div>
 
-    {{if .Tags}}
-    <div class="flex flex-wrap gap-1 mt-1.5">
-      {{range .Tags}}
-      <span class="text-xs px-1.5 py-0.5 bg-indigo-950/70 text-indigo-400 rounded border border-indigo-800/40">
+  {{if .Tags}}
+  <div class="flex flex-wrap gap-1 mt-1.5">
+    {{range .Tags}}
+    <span class="text-xs px-1.5 py-0.5 bg-indigo-950/70 text-indigo-400 rounded border border-indigo-800/40">
         {{.}}
       </span>
-      {{end}}
-    </div>
     {{end}}
-
-    <div class="flex items-center justify-between mt-1">
-      <span class="text-xs text-gray-600">{{fmtDate .UpdatedAt}}</span>
-    </div>
   </div>
   {{end}}
+
+  <div class="flex items-center justify-between mt-1">
+    <span class="text-xs text-gray-600">{{fmtDate .UpdatedAt}}</span>
+
+    <!-- Delete button: visible on hover, stops propagation to the edit hx-get -->
+    <button class="opacity-0 group-hover:opacity-100 text-xs text-red-500 hover:text-red-400
+                     transition-opacity px-1"
+            hx-delete="/notes/{{.ID}}"
+            hx-target="#notes-list"
+            hx-swap="innerHTML"
+            hx-confirm="Delete this note?"
+            onclick="event.stopPropagation()">
+      ✕
+    </button>
+  </div>
+</div>
+{{end}}
 {{else}}
-  <p class="px-4 py-8 text-xs text-gray-600 text-center">No notes yet.<br>Create one to get started.</p>
+<p class="px-4 py-8 text-xs text-gray-600 text-center">No notes yet.<br>Create one to get started.</p>
 {{end}}
 {{end}}

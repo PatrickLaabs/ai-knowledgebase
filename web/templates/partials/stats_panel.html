@@ -1,0 +1,33 @@
+{{define "stats_panel"}}
+<div class="space-y-2 text-xs">
+
+  <!-- Index coverage bar -->
+  <div>
+    <div class="flex items-center justify-between mb-1">
+      <span class="text-gray-500">Indexed</span>
+      <span class="text-gray-400 font-medium">{{.IndexedNotes}}/{{.TotalNotes}}</span>
+    </div>
+    <div class="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
+      <div class="h-full rounded-full transition-all
+                  {{if eq .Percent 100}}bg-emerald-500{{else if ge .Percent 50}}bg-indigo-500{{else}}bg-amber-500{{end}}"
+           style="width: {{.Percent}}%"></div>
+    </div>
+    {{if gt .Unindexed 0}}
+    <p class="text-amber-500 mt-1">{{.Unindexed}} note{{if ne .Unindexed 1}}s{{end}} pending indexing</p>
+    {{else}}
+    <p class="text-emerald-500/80 mt-1">All notes indexed</p>
+    {{end}}
+  </div>
+
+  <!-- Meta grid -->
+  <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-gray-500 pt-1">
+    <span>Tags</span><span class="text-gray-400 text-right">{{.TotalTags}}</span>
+    <span>Reindexed</span><span class="text-gray-400 text-right">{{.LastReindex}}</span>
+  </div>
+
+  <!-- Embed model -->
+  <p class="text-gray-600 truncate pt-1" title="{{.EmbedModel}}">
+    <span class="text-gray-700">model:</span> {{.EmbedModel}}
+  </p>
+</div>
+{{end}}
