@@ -123,11 +123,6 @@ func main() {
 	mux.HandleFunc("POST /api/auth/register", srv.handleRegister)
 
 	// ── Protected JSON API ────────────────────────────────────────────────────
-	mux.Handle("GET /api/notes", auth(srv.handleListNotes))
-	mux.Handle("POST /api/notes", auth(srv.handleCreateNote))
-	mux.Handle("PUT /api/notes/{id}", auth(srv.handleUpdateNote))
-	mux.Handle("DELETE /api/notes/{id}", auth(srv.handleDeleteNote))
-	mux.Handle("GET /api/tags", auth(srv.handleListTags))
 	mux.Handle("POST /api/chat", auth(srv.handleChat))
 	mux.Handle("POST /api/admin/reindex", auth(srv.handleStartReindex))
 	mux.Handle("GET /api/admin/reindex/status", auth(srv.handleReindexStatus))
