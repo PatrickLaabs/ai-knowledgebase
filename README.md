@@ -29,28 +29,7 @@ Docs are coming, mainly focused on kubernetes and maybe docker-compose for local
 
 ### Architecture Overview
 
-```mermaid
-graph TD
-    U([User]) -->|HTTP + session cookie| MW[loggingMiddleware\nrequireAuth]
-    MW --> APP{Go Application\nnotes · chat · auth · reindex}
-
-    APP -->|embedText| OL[(Ollama\ngranite4.1 / llama3)]
-    APP -->|pgvector store & search| PG[(PostgreSQL\npgvector)]
-    APP -->|chat history TTL 30m| VK[(Valkey\nkey-value cache)]
-
-    OL -->|vector float32| APP
-    PG -->|top-5 notes| APP
-    VK -->|last 10 turns| APP
-
-    APP -->|SSE stream| U
-
-    style APP fill:#534AB7,color:#EEEDFE,stroke:#3C3489
-    style OL  fill:#993C1D,color:#FAECE7,stroke:#712B13
-    style PG  fill:#185FA5,color:#E6F1FB,stroke:#0C447C
-    style VK  fill:#BA7517,color:#FAEEDA,stroke:#854F0B
-    style MW  fill:#5F5E5A,color:#F1EFE8,stroke:#444441
-    style U   fill:#5F5E5A,color:#F1EFE8,stroke:#444441
-```
+![Architecture-Overview](assets/arch_overview.png "Architecture-Overview")
 
 ---
 
