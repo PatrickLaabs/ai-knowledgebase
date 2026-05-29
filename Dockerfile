@@ -40,7 +40,7 @@ RUN tailwindcss \
       --output ./web/static/css/tailwind.css
 
 # ── Stage 2: Build ────────────────────────────────────────────────────────────
-FROM golang:1.26-alpine AS builder
+FROM golang:1.26.3-alpine AS builder
 
 WORKDIR /app
 
