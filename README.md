@@ -25,51 +25,89 @@ Docs are coming, mainly focused on kubernetes and maybe docker-compose for local
 
 ![AI-KnowledgeBase](assets/app-image.png "AI-KnowledgeBase")
 
+## Data Flow
+
+### Architecture Overview
+
+```mermaid
+graph TD
+    U([User]) -->|HTTP + session cookie| MW[loggingMiddleware\nrequireAuth]
+    MW --> APP{Go Application\nnotes · chat · auth · reindex}
+
+    APP -->|embedText| OL[(Ollama\ngranite4.1 / llama3)]
+    APP -->|pgvector store & search| PG[(PostgreSQL\npgvector)]
+    APP -->|chat history TTL 30m| VK[(Valkey\nkey-value cache)]
+
+    OL -->|vector float32| APP
+    PG -->|top-5 notes| APP
+    VK -->|last 10 turns| APP
+
+    APP -->|SSE stream| U
+
+    style APP fill:#534AB7,color:#EEEDFE,stroke:#3C3489
+    style OL  fill:#993C1D,color:#FAECE7,stroke:#712B13
+    style PG  fill:#185FA5,color:#E6F1FB,stroke:#0C447C
+    style VK  fill:#BA7517,color:#FAEEDA,stroke:#854F0B
+    style MW  fill:#5F5E5A,color:#F1EFE8,stroke:#444441
+    style U   fill:#5F5E5A,color:#F1EFE8,stroke:#444441
+```
+
+---
+
+### Phase 1 — Document Indexing
+
 ```mermaid
 sequenceDiagram
     autonumber
     actor User
     participant App as Go Application
-    participant Valkey as Valkey (External)
-    participant PG as Postgres (External)
-    participant Ollama as Ollama (External)
+    participant Ollama as Ollama (embed model)
+    participant PG as PostgreSQL (pgvector)
+    participant VK as Valkey
 
-    %% -------------------------------------
-    %% FLOW 1: DOCUMENT INDEXING
-    %% -------------------------------------
-    rect rgb(230, 240, 255)
-    Note over User, Ollama: PHASE 1: Document Indexing (Ingestion)
-    
-    User->>App: Add/Upload new Markdown Note
-    
-    App->>Ollama: Send note text (Embedding request)
-    Ollama-->>App: Return vector representation
-    
-    App->>PG: Store raw text + vector embedding
-    App->>Valkey: Update cache with new metadata/indexing state
-    
-    App-->>User: "Note saved and indexed"
-    end
+    User->>App: POST /api/notes {content, tags}
+    Note over App: notes.go → handleCreateNote
 
-    %% -------------------------------------
-    %% FLOW 2: AI CHAT / SEARCH
-    %% -------------------------------------
-    rect rgb(235, 255, 235)
-    Note over User, Ollama: PHASE 2: Chat & Search (Retrieval-Augmented Generation)
-    
-    User->>App: Ask a question
-    
-    App->>Valkey: Check cache for recent identical queries
-    App->>Ollama: Send question text (Embedding request)
-    Ollama-->>App: Return query vector
-    
-    App->>PG: Perform similarity search (pgvector)
-    PG-->>App: Return top relevant notes/context
-    
-    App->>Ollama: Send System Prompt + Relevant Notes + User Question (Chat request)
-    Ollama-->>App: Stream LLM answer
-    
-    App-->>User: Display context-aware answer
-    end
+    App->>Ollama: embedText(content)
+    Ollama-->>App: []float32 vector
 
+    App->>PG: INSERT notes (content, tags, embedding, user_id)
+    App->>VK: metadata / cache update
+
+    App-->>User: 201 Created {id}
+```
+
+---
+
+### Phase 2 — RAG Chat & Search
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant App as Go Application
+    participant VK as Valkey
+    participant Ollama as Ollama (embed + generate)
+    participant PG as PostgreSQL (pgvector)
+
+    User->>App: POST /api/chat {query, session_id}
+    Note over App: chat.go → handleChat
+
+    App->>VK: LRANGE chat_history:{uid}:{session} 0 9
+    VK-->>App: last 10 conversation turns
+
+    App->>Ollama: embedText(query)
+    Ollama-->>App: query vector []float32
+
+    App->>PG: SELECT … ORDER BY embedding <=> $1 LIMIT 5
+    PG-->>App: top-5 relevant notes
+
+    Note over App: Build system prompt =<br/>system instructions<br/>+ retrieved notes<br/>+ conversation history
+
+    App->>Ollama: Generate(systemPrompt + query) stream=true
+    Ollama-->>App: streamed tokens
+
+    App-->>User: SSE stream (data: {chunk, done})
+
+    App->>VK: LPUSH + LTRIM + EXPIRE 30m (persist turn)
 ```
