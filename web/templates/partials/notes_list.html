@@ -26,21 +26,6 @@
     {{end}}
   </div>
   {{end}}
-
-  <div class="flex items-center justify-between mt-1">
-    <span class="text-xs text-gray-600">{{fmtDate .UpdatedAt}}</span>
-
-    <!-- Delete button: visible on hover, stops propagation to the edit hx-get -->
-    <button class="opacity-0 group-hover:opacity-100 text-xs text-red-500 hover:text-red-400
-                     transition-opacity px-1"
-            hx-delete="/notes/{{.ID}}"
-            hx-target="#notes-list"
-            hx-swap="innerHTML"
-            hx-confirm="Delete this note?"
-            onclick="event.stopPropagation()">
-      ✕
-    </button>
-  </div>
 </div>
 {{end}}
 {{else}}
