@@ -22,6 +22,7 @@ func draftKey(userID, noteID int) string {
 }
 
 type Draft struct {
+	Title   string `json:"title"`
 	Content string `json:"content"`
 	Tags    string `json:"tags"` // raw comma-separated string, as typed
 }
@@ -67,6 +68,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	noteID, _ := strconv.Atoi(r.URL.Query().Get("id")) // 0 for new notes
 
 	d := Draft{
+		Title:   r.FormValue("title"),
 		Content: r.FormValue("content"),
 		Tags:    r.FormValue("tags"),
 	}

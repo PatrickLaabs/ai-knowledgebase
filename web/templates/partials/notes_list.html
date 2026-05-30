@@ -6,15 +6,19 @@
      hx-target="#note-modal"
      hx-swap="innerHTML">
 
-  <!-- Content preview: first ~80 chars, with index status dot -->
+  <!-- Title or content preview, with index status dot -->
   <div class="flex items-start gap-1.5 pr-5">
-    <!-- Index status dot: green = indexed, amber pulse = pending -->
-    <span class="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full
+      <span class="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full
                    {{if .Indexed}}bg-emerald-500{{else}}bg-amber-500 animate-pulse{{end}}"
-          title="{{if .Indexed}}Indexed{{else}}Indexing pending{{end}}"></span>
-    <p class="text-xs text-gray-300 leading-relaxed line-clamp-2">
-      {{truncate .Content 90}}
-    </p>
+            title="{{if .Indexed}}Indexed{{else}}Indexing pending{{end}}"></span>
+    <div class="min-w-0">
+      {{if .Title}}
+      <p class="text-xs font-medium text-gray-200 truncate">{{.Title}}</p>
+      <p class="text-xs text-gray-500 leading-relaxed line-clamp-1 mt-0.5">{{truncate .Content 60}}</p>
+      {{else}}
+      <p class="text-xs text-gray-300 leading-relaxed line-clamp-2">{{truncate .Content 90}}</p>
+      {{end}}
+    </div>
   </div>
 
   {{if .Tags}}

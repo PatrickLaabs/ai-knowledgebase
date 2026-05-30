@@ -30,28 +30,50 @@
       </div>
     </div>
 
-    <!-- ── Tag chip input ── -->
+    <!-- ── Title ── -->
     <div class="px-4 sm:px-5 pt-3 flex-shrink-0">
+      <input type="text"
+             id="note-title"
+             name="title"
+             value="{{.Title}}"
+             placeholder="Note title (optional)"
+             autocomplete="off"
+             class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2
+                    text-sm text-gray-100 placeholder-gray-500
+                    focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+    </div>
+
+    <!-- ── Tag chip input with autocomplete ── -->
+    <div class="px-4 sm:px-5 pt-2 flex-shrink-0">
       <div class="flex items-start gap-2">
         <label class="text-xs font-medium text-gray-500 whitespace-nowrap mt-1.5">Tags</label>
-        <div id="tag-chip-box"
-             class="flex flex-wrap gap-1.5 flex-1 min-h-[34px]
-                    bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5
-                    focus-within:ring-1 focus-within:ring-indigo-500 cursor-text">
-          {{range .Tags}}
-          <span class="tag-chip inline-flex items-center gap-1 text-xs px-2 py-0.5
-                       bg-indigo-950 text-indigo-300 border border-indigo-800/60 rounded"
-                data-tag="{{.}}">
-            {{.}}<button type="button"
-                         class="tag-chip-remove text-indigo-500 hover:text-indigo-200 leading-none ml-0.5">×</button>
-          </span>
-          {{end}}
-          <input type="text"
-                 id="tag-input-field"
-                 placeholder="type a tag…"
-                 autocomplete="off"
-                 class="flex-1 min-w-[100px] bg-transparent text-xs text-gray-100
-                        placeholder-gray-600 outline-none py-0.5 cursor-text" />
+        <div class="relative flex-1">
+          <div id="tag-chip-box"
+               class="flex flex-wrap gap-1.5 min-h-[34px]
+                      bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5
+                      focus-within:ring-1 focus-within:ring-indigo-500 cursor-text">
+            {{range .Tags}}
+            <span class="tag-chip inline-flex items-center gap-1 text-xs px-2 py-0.5
+                         bg-indigo-950 text-indigo-300 border border-indigo-800/60 rounded"
+                  data-tag="{{.}}">
+              {{.}}<button type="button"
+                           class="tag-chip-remove text-indigo-500 hover:text-indigo-200 leading-none ml-0.5">×</button>
+            </span>
+            {{end}}
+            <input type="text"
+                   id="tag-input-field"
+                   name="q"
+                   placeholder="type a tag…"
+                   autocomplete="off"
+                   hx-get="/tags/suggest"
+                   hx-trigger="keyup changed delay:200ms"
+                   hx-target="#tag-suggestions-anchor"
+                   hx-swap="innerHTML"
+                   class="flex-1 min-w-[100px] bg-transparent text-xs text-gray-100
+                          placeholder-gray-600 outline-none py-0.5 cursor-text" />
+          </div>
+          <!-- Suggestions dropdown renders here, positioned absolute relative to this container -->
+          <div id="tag-suggestions-anchor"></div>
         </div>
         <button type="button"
                 onclick="window.addTagFromInput()"
@@ -73,20 +95,18 @@
                      border-b-2 border-transparent transition-colors">Preview</button>
     </div>
 
-    <!-- ── Form wraps editor panes AND footer so #save-status-target is always in scope ── -->
+    <!-- ── Form wraps editor panes AND footer ── -->
     <form id="note-form"
           {{if .ID}}hx-put="/notes/{{.ID}}"{{else}}hx-post="/notes"{{end}}
           hx-target="#notes-list"
           hx-swap="innerHTML"
           class="flex flex-col flex-1 overflow-hidden min-h-0">
 
-      <!-- Hidden tags — inside form so it's always serialised -->
       <input type="hidden" id="note-tags" name="tags" value="{{joinTags .Tags}}" />
+      <!-- Title is also inside the form so it gets serialised -->
+      <input type="hidden" id="note-title-hidden" name="title" />
 
-      <!-- Editor / Preview panes -->
       <div class="flex flex-col sm:flex-row flex-1 overflow-hidden px-4 sm:px-5 pt-3 gap-3 sm:gap-4 min-h-0">
-
-        <!-- Editor pane -->
         <div id="pane-edit" class="flex flex-col gap-1 flex-1 min-h-0 min-w-0">
           <label class="text-xs font-medium text-gray-500 hidden sm:block">Editor</label>
           <textarea name="content" id="note-content" required
@@ -102,7 +122,6 @@
                     hx-include="#note-tags">{{.Content}}</textarea>
         </div>
 
-        <!-- Preview pane -->
         <div id="pane-preview" class="hidden sm:flex flex-col gap-1 flex-1 min-h-0 min-w-0">
           <label class="text-xs font-medium text-gray-500 hidden sm:block">Preview</label>
           <div id="md-preview"
@@ -111,12 +130,11 @@
             <span class="text-gray-600 text-xs">Preview will appear here…</span>
           </div>
         </div>
-
       </div>
 
+      <!-- ── Footer ── -->
       <div class="flex items-center justify-between gap-2 px-4 sm:px-5 py-3
                   border-t border-gray-800 flex-shrink-0">
-
         <div>
           {{if .ID}}
           <button type="button"
@@ -146,10 +164,39 @@
             {{if .ID}}Save changes{{else}}Create note{{end}}
           </button>
         </div>
-
       </div>
     </form>
 
   </div>
 </div>
+
+<script>
+  // Sync the visible title input (outside the form) to the hidden one inside the form.
+  (function() {
+    var visible = document.getElementById('note-title');
+    var hidden  = document.getElementById('note-title-hidden');
+    if (visible && hidden) {
+      hidden.value = visible.value;
+      visible.addEventListener('input', function() { hidden.value = this.value; });
+    }
+
+    // Dismiss suggestions when clicking outside
+    document.addEventListener('click', function(e) {
+      var anchor = document.getElementById('tag-suggestions-anchor');
+      if (anchor && !e.target.closest('#tag-chip-box') && !e.target.closest('#tag-suggestions-anchor')) {
+        anchor.innerHTML = '';
+      }
+    });
+
+    // Dismiss suggestions after adding a chip
+    var origAddChip = window.addChip;
+    if (origAddChip) {
+      window.addChip = function(raw) {
+        origAddChip(raw);
+        var anchor = document.getElementById('tag-suggestions-anchor');
+        if (anchor) anchor.innerHTML = '';
+      };
+    }
+  })();
+</script>
 {{end}}

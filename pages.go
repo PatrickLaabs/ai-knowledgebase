@@ -14,6 +14,7 @@ import (
 // Note is the template-friendly struct used by all HTML/htmx handlers.
 type Note struct {
 	ID        int
+	Title     string
 	Content   string
 	Tags      []string
 	CreatedAt time.Time
@@ -56,28 +57,6 @@ func buildTagTree(tags []string) []*TagNode {
 	}
 	return root.Children
 }
-
-// queryTagTree fetches all distinct tags for a user and returns a tree.
-func (s *Server) queryTagTree(r *http.Request, userID int) []*TagNode {
-	rows, err := s.db.Query(r.Context(), `
-		SELECT DISTINCT unnest(tags) AS tag
-		FROM notes WHERE user_id = $1 ORDER BY tag
-	`, userID)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var tags []string
-	for rows.Next() {
-		var t string
-		if rows.Scan(&t) == nil {
-			tags = append(tags, t)
-		}
-	}
-	return buildTagTree(tags)
-}
-
-// ── Full page handlers ─────────────────────────────────────────────────────────
 
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
@@ -190,7 +169,7 @@ func (s *Server) handleLogoutPost(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAppPage(w http.ResponseWriter, r *http.Request) {
 	user := userFromContext(r.Context())
 	notes, _ := s.queryNotes(r, user.UserID, "", "")
-	tagTree := s.queryTagTree(r, user.UserID)
+	tagTree := s.cachedTagTree(r.Context(), user.UserID)
 	s.render(w, "app", map[string]any{
 		"User":    user,
 		"Notes":   notes,
@@ -210,7 +189,7 @@ func (s *Server) handleNotesPartial(w http.ResponseWriter, r *http.Request) {
 // GET /tags/tree — returns refreshed tag tree partial after a note is saved.
 func (s *Server) handleTagTreePartial(w http.ResponseWriter, r *http.Request) {
 	user := userFromContext(r.Context())
-	s.render(w, "tag_tree", s.queryTagTree(r, user.UserID))
+	s.render(w, "tag_tree", s.cachedTagTree(r.Context(), user.UserID))
 }
 
 // GET /notes/new
@@ -218,6 +197,7 @@ func (s *Server) handleNoteNewForm(w http.ResponseWriter, r *http.Request) {
 	user := userFromContext(r.Context())
 	n := &Note{}
 	if draft, _ := s.loadDraft(r.Context(), user.UserID, 0); draft != nil {
+		n.Title = draft.Title
 		n.Content = draft.Content
 		n.Tags = parseTags(draft.Tags)
 		n.HasDraft = true
@@ -234,47 +214,20 @@ func (s *Server) handleNoteEditForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var n Note
-	if err := s.db.QueryRow(r.Context(),
-		`SELECT id, content, tags, created_at, updated_at FROM notes WHERE id=$1 AND user_id=$2`,
+	if err = s.db.QueryRow(r.Context(),
+		`SELECT id, title, content, tags, created_at, updated_at FROM notes WHERE id=$1 AND user_id=$2`,
 		id, user.UserID,
-	).Scan(&n.ID, &n.Content, &n.Tags, &n.CreatedAt, &n.UpdatedAt); err != nil {
+	).Scan(&n.ID, &n.Title, &n.Content, &n.Tags, &n.CreatedAt, &n.UpdatedAt); err != nil {
 		http.Error(w, "note not found", http.StatusNotFound)
 		return
 	}
 	if draft, _ := s.loadDraft(r.Context(), user.UserID, id); draft != nil {
+		n.Title = draft.Title
 		n.Content = draft.Content
 		n.Tags = parseTags(draft.Tags)
 		n.HasDraft = true
 	}
 	s.render(w, "note_form", &n)
-}
-
-// POST /notes
-func (s *Server) handleCreateNotePartial(w http.ResponseWriter, r *http.Request) {
-	user := userFromContext(r.Context())
-	content := strings.TrimSpace(r.FormValue("content"))
-	if content == "" {
-		http.Error(w, "content required", http.StatusBadRequest)
-		return
-	}
-	tags := parseTags(r.FormValue("tags"))
-	emb, err := s.embedText(r.Context(), content)
-	if err != nil {
-		http.Error(w, "embed error", http.StatusInternalServerError)
-		return
-	}
-	var id int
-	if err := s.db.QueryRow(r.Context(),
-		`INSERT INTO notes (content, tags, embedding, user_id) VALUES ($1, $2, $3, $4) RETURNING id`,
-		content, tags, pgvector.NewVector(emb), user.UserID,
-	).Scan(&id); err != nil {
-		slog.Error("createNotePartial: insert failed", "error", err)
-		http.Error(w, "db error", http.StatusInternalServerError)
-		return
-	}
-	s.clearDraft(r.Context(), user.UserID, 0)
-	slog.Info("note created (html)", "id", id, "user_id", user.UserID)
-	s.refreshAndCloseModal(w, r, user.UserID)
 }
 
 // PUT /notes/{id}
@@ -306,6 +259,7 @@ func (s *Server) handleUpdateNotePartial(w http.ResponseWriter, r *http.Request)
 	}
 	s.clearDraft(r.Context(), user.UserID, id)
 	slog.Info("note updated (html)", "id", id, "user_id", user.UserID)
+	s.invalidateTagTreeCache(r.Context(), user.UserID)
 	s.refreshAndCloseModal(w, r, user.UserID)
 }
 
@@ -324,10 +278,7 @@ func (s *Server) handleDeleteNotePartial(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	slog.Info("note deleted (html)", "id", id, "user_id", user.UserID)
-
-	// Reuse refreshAndCloseModal — it already does OOB tag tree + notes list.
-	// Modal is already closed (delete comes from the list, not the form),
-	// so the empty OOB modal div is harmless.
+	s.invalidateTagTreeCache(r.Context(), user.UserID)
 	s.refreshAndCloseModal(w, r, user.UserID)
 }
 
@@ -337,13 +288,14 @@ func (s *Server) handleEmpty(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) refreshAndCloseModal(w http.ResponseWriter, r *http.Request, userID int) {
 	notes, err := s.queryNotes(r, userID, "", "")
+	user := userFromContext(r.Context())
 	if err != nil {
 		slog.Error("refreshAndCloseModal: query failed", "error", err)
 		notes = []Note{}
 	}
 	s.render(w, "refresh_oob", map[string]any{
 		"Notes":   notes,
-		"TagTree": s.queryTagTree(r, userID),
+		"TagTree": s.cachedTagTree(r.Context(), user.UserID),
 	})
 }
 
@@ -358,18 +310,18 @@ func (s *Server) queryNotes(r *http.Request, userID int, tag, search string) ([]
 		if err != nil {
 			return nil, err
 		}
-		sqlStr = `SELECT id, content, tags, created_at, updated_at, embedding IS NOT NULL
+		sqlStr = `SELECT id, title, content, tags, created_at, updated_at, embedding IS NOT NULL
 		          FROM notes WHERE embedding IS NOT NULL AND user_id = $2
 		          ORDER BY embedding <=> $1 LIMIT 50`
 		args = []any{pgvector.NewVector(emb), userID}
 	case tag != "":
-		sqlStr = `SELECT id, content, tags, created_at, updated_at, embedding IS NOT NULL
+		sqlStr = `SELECT id, title, content, tags, created_at, updated_at, embedding IS NOT NULL
 		          FROM notes WHERE user_id = $1
 		            AND EXISTS (SELECT 1 FROM unnest(tags) t WHERE t = $2 OR t LIKE $2 || '/%')
 		          ORDER BY updated_at DESC`
 		args = []any{userID, tag}
 	default:
-		sqlStr = `SELECT id, content, tags, created_at, updated_at, embedding IS NOT NULL
+		sqlStr = `SELECT id, title, content, tags, created_at, updated_at, embedding IS NOT NULL
 		          FROM notes WHERE user_id = $1 ORDER BY updated_at DESC`
 		args = []any{userID}
 	}
@@ -381,7 +333,7 @@ func (s *Server) queryNotes(r *http.Request, userID int, tag, search string) ([]
 	var notes []Note
 	for rows.Next() {
 		var n Note
-		if err := rows.Scan(&n.ID, &n.Content, &n.Tags, &n.CreatedAt, &n.UpdatedAt, &n.Indexed); err == nil {
+		if err := rows.Scan(&n.ID, &n.Title, &n.Content, &n.Tags, &n.CreatedAt, &n.UpdatedAt, &n.Indexed); err == nil {
 			if n.Tags == nil {
 				n.Tags = []string{}
 			}

@@ -126,8 +126,6 @@ func main() {
 	mux.Handle("POST /api/chat", auth(srv.handleChat))
 	mux.Handle("POST /api/admin/reindex", auth(srv.handleStartReindex))
 	mux.Handle("GET /api/admin/reindex/status", auth(srv.handleReindexStatus))
-
-	mux.Handle("GET /api/save-status/{jobID}", authHTML(srv.handleSaveStatus))
 	mux.Handle("GET /api/stats", authHTML(srv.handleStats))
 
 	// ── Static assets ─────────────────────────────────────────────────────────
@@ -152,13 +150,14 @@ func main() {
 	// Order matters: more specific literal paths before wildcard paths.
 	mux.Handle("GET /notes", authHTML(srv.handleNotesPartial))
 	mux.Handle("GET /notes/new", authHTML(srv.handleNoteNewForm))
-	mux.Handle("POST /notes", authHTML(srv.handleCreateNoteAsync))
 	mux.Handle("GET /notes/{id}/edit", authHTML(srv.handleNoteEditForm))
+	mux.Handle("POST /notes", authHTML(srv.handleCreateNoteAsync))
 	mux.Handle("PUT /notes/{id}", authHTML(srv.handleUpdateNoteAsync))
 	mux.Handle("DELETE /notes/{id}", authHTML(srv.handleDeleteNotePartial))
 
 	// ── Tags ──────────────────────────────────────────────────────────────────
 	mux.Handle("GET /tags/tree", authHTML(srv.handleTagTreePartial))
+	mux.Handle("GET /tags/suggest", authHTML(srv.handleTagSuggest))
 
 	// ── Utility ───────────────────────────────────────────────────────────────
 	mux.HandleFunc("GET /empty", srv.handleEmpty)

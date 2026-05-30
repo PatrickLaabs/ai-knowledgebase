@@ -292,7 +292,11 @@
     }
   });
   document.addEventListener('focusout', function(e) {
-    if (e.target && e.target.id === 'tag-input-field' && e.target.value.trim()) addTagFromInput();
+    if (!e.target || e.target.id !== 'tag-input-field') return;
+    setTimeout(function() {
+      var field = document.getElementById('tag-input-field');
+      if (field && field.value.trim()) addTagFromInput();
+    }, 150);
   });
 </script>
 <script src="/static/js/editor.js"></script>

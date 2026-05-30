@@ -1,12 +1,5 @@
 {{define "save_oob"}}
 {{/*
-  Out-of-band swaps fired after an async note save closes the modal.
-  Rendered by closeModalAndScheduleRefresh. The .TagTree field carries the
-  refreshed tag tree so we can reuse the existing tag_tree partial.
-
-  - #note-modal      → cleared (closes the modal)
-  - #notes-list      → spinner placeholder that self-refreshes after 2s
-  - #tag-tree        → refreshed in case new tags were added
 */}}
 
 <div id="note-modal" hx-swap-oob="true"></div>
@@ -17,14 +10,6 @@
      hx-trigger="load delay:2s"
      hx-target="#notes-list"
      hx-swap="innerHTML">
-  <div class="flex items-center justify-center gap-1.5 px-3 py-3 text-xs text-gray-500">
-    <svg class="animate-spin h-3 w-3 text-indigo-500"
-         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-    </svg>
-    Saving…
-  </div>
 </div>
 
 <div id="tag-tree" hx-swap-oob="true">

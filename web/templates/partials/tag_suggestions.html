@@ -1,0 +1,15 @@
+{{define "tag_suggestions"}}
+<div id="tag-suggestions"
+     class="absolute left-0 right-0 top-full mt-1 bg-gray-800 border border-gray-700
+            rounded-lg shadow-xl z-50 max-h-36 overflow-y-auto">
+  {{range .}}
+  <button type="button"
+          onmousedown="event.preventDefault();"
+          onclick="addChip('{{.}}')"
+          class="w-full text-left px-3 py-1.5 text-xs text-gray-300
+                 hover:bg-indigo-600/30 hover:text-indigo-300 transition-colors">
+    {{.}}
+  </button>
+  {{end}}
+</div>
+{{end}}
